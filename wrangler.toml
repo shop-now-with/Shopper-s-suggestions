@@ -9,6 +9,9 @@ database_id = "7fc3ac99-20b3-40f1-a022-1a11a0b4a177"
 
 [vars]
 ADMIN_PASSWORD = "7034"
+GITHUB_BRANCH = "main"
+GITHUB_OWNER = "shop-now-with"
+GITHUB_REPO = "Shopper-s-suggestions"
 
 [assets]
 directory = "./"
