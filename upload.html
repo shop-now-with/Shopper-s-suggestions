@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopper's Suggestions — Upload</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f7f8fa;
+  color: #111827;
+}
+
+.container {
+  width: min(920px, calc(100% - 28px));
+  margin: 30px auto 60px;
+}
+
+.header {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.05);
+}
+
+.logo {
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: -.7px;
+  background: linear-gradient(90deg, #f97316, #0f2d5c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.subtitle {
+  margin-top: 7px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.05);
+}
+
+h2 {
+  margin: 0 0 18px;
+  font-size: 20px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 16px 0 7px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 13px 14px;
+  font: inherit;
+  outline: none;
+  background: white;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249,115,22,.10);
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 13px 17px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary {
+  background: linear-gradient(90deg, #f97316, #0f2d5c);
+  color: white;
+}
+
+.secondary {
+  background: #eef0f3;
+  color: #111827;
+}
+
+.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.message {
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.success {
+  color: #15803d;
+}
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.media-box {
+  position: relative;
+  min-height: 120px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.media-box img,
+.media-box video {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+
+.media-label {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: rgba(0,0,0,.68);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.file-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.file-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 15px;
+  padding: 14px;
+  background: #fafafa;
+}
+
+.file-card strong {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.file-card small {
+  color: #6b7280;
+  display: block;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.file-card input {
+  padding: 10px;
+  background: white;
+}
+
+.publish-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.product {
+  border: 1px solid #e5e7eb;
+  border-radius: 15px;
+  padding: 15px;
+  margin-top: 12px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.product-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.product-title {
+  font-weight: 900;
+  margin-bottom: 5px;
+}
+
+.product-meta {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.product img {
+  width: 70px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+.loading {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+@media (max-width: 700px) {
+  .container {
+    width: min(100% - 18px, 920px);
+    margin-top: 10px;
+  }
+
+  .card,
+  .header {
+    border-radius: 15px;
+    padding: 16px;
+  }
+
+  .media-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .file-row {
+    grid-template-columns: 1fr;
+  }
+
+  .product {
+    align-items: flex-start;
+  }
+
+  .product img {
+    width: 58px;
+    height: 58px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div class="logo">Shopper's Suggestions</div>
+    <div class="subtitle">Private product management & media upload</div>
+  </div>
+
+  <!-- LOGIN -->
+  <section class="card" id="loginCard">
+    <h2>Admin Login</h2>
+
+    <label for="adminPassword">Admin password</label>
+    <input
+      id="adminPassword"
+      type="password"
+      autocomplete="current-password"
+      placeholder="Enter admin password"
+    >
+
+    <div class="publish-row">
+      <button class="primary" id="loginBtn" onclick="login()">
+        Login
+      </button>
+    </div>
+
+    <div id="loginMessage" class="message"></div>
+  </section>
+
+  <!-- ADMIN -->
+  <main id="adminArea" class="hidden">
+
+    <section class="card">
+      <h2>Add Product</h2>
+
+      <label for="title">Product title</label>
+      <input
+        id="title"
+        type="text"
+        placeholder="Example: Wireless Headphones"
+      >
+
+      <label for="description">Description</label>
+      <textarea
+        id="description"
+        placeholder="Write a useful product description..."
+      ></textarea>
+
+      <label for="affiliateUrl">Affiliate link</label>
+      <input
+        id="affiliateUrl"
+        type="url"
+        placeholder="https://..."
+      >
+
+      <label for="category">Category</label>
+      <select id="category">
+        <option value="Other">Other</option>
+        <option>Tech</option>
+        <option>Home</option>
+        <option>Fashion</option>
+        <option>Beauty</option>
+        <option>Gaming</option>
+        <option>Sports</option>
+        <option>Travel</option>
+        <option>Kitchen</option>
+        <option>Office</option>
+        <option>Automotive</option>
+        <option>Electronics</option>
+        <option>Kids</option>
+        <option>Pets</option>
+        <option>Fitness</option>
+        <option>Books</option>
+        <option>Accessories</option>
+        <option>Photography</option>
+        <option>Creator</option>
+      </select>
+
+      <label>Product media</label>
+
+      <div class="file-row">
+
+        <div class="file-card">
+          <strong>Images</strong>
+          <small>
+            Select up to 5 images directly from your iPhone.
+          </small>
+
+          <input
+            id="imageFiles"
+            type="file"
+            accept="image/*"
+            multiple
+            onchange="previewImages()"
+          >
+        </div>
+
+        <div class="file-card">
+          <strong>Video</strong>
+          <small>
+            Select one product video. Maximum 25 MB.
+          </small>
+
+          <input
+            id="videoFile"
+            type="file"
+            accept="video/*"
+            onchange="previewVideo()"
+          >
+        </div>
+
+      </div>
+
+      <div id="mediaPreview" class="media-grid"></div>
+
+      <div class="publish-row">
+        <button
+          class="primary"
+          id="publishBtn"
+          onclick="publishProduct()"
+        >
+          PUBLISH PRODUCT
+        </button>
+
+        <button
+          class="secondary"
+          onclick="clearForm()"
+        >
+          CLEAR
+        </button>
+
+        <button
+          class="secondary"
+          onclick="logout()"
+        >
+          LOGOUT
+        </button>
+      </div>
+
+      <div id="publishMessage" class="message"></div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section class="card">
+      <h2>Manage Products</h2>
+
+      <div class="publish-row">
+        <button class="secondary" onclick="loadProducts()">
+          REFRESH PRODUCTS
+        </button>
+      </div>
+
+      <div id="products">
+        <div class="loading">No products loaded.</div>
+      </div>
+    </section>
+
+  </main>
+
+</div>
+
+<script>
+const API = "/api";
+
+let adminToken = "";
+let selectedImages = [];
+let selectedVideo = null;
+
+function showMessage(elementId, text, type = "") {
+  const el = document.getElementById(elementId);
+  el.textContent = text;
+  el.className = "message " + type;
+}
+
+async function login() {
+  const password =
+    document.getElementById("adminPassword").value.trim();
+
+  if (!password) {
+    showMessage(
+      "loginMessage",
+      "Enter your admin password.",
+      "error"
+    );
+    return;
+  }
+
+  const button =
+    document.getElementById("loginBtn");
+
+  button.disabled = true;
+  button.textContent = "CHECKING...";
+
+  try {
+    const response = await fetch(
+      `${API}/admin/check`,
+      {
+        headers: {
+          "Authorization": `Bearer ${password}`
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.error || "Invalid admin password."
+      );
+    }
+
+    adminToken = password;
+
+    document
+      .getElementById("loginCard")
+      .classList.add("hidden");
+
+    document
+      .getElementById("adminArea")
+      .classList.remove("hidden");
+
+    showMessage(
+      "publishMessage",
+      "Admin login successful.",
+      "success"
+    );
+
+    loadProducts();
+
+  } catch (error) {
+
+    showMessage(
+      "loginMessage",
+      error.message || "Login failed.",
+      "error"
+    );
+
+  } finally {
+
+    button.disabled = false;
+    button.textContent = "Login";
+  }
+}
+
+function previewImages() {
+  const input =
+    document.getElementById("imageFiles");
+
+  selectedImages =
+    Array.from(input.files || []).slice(0, 5);
+
+  if ((input.files || []).length > 5) {
+    showMessage(
+      "publishMessage",
+      "Only the first 5 images will be used.",
+      "error"
+    );
+  }
+
+  renderPreview();
+}
+
+function previewVideo() {
+  const input =
+    document.getElementById("videoFile");
+
+  selectedVideo =
+    input.files && input.files[0]
+      ? input.files[0]
+      : null;
+
+  renderPreview();
+}
+
+function renderPreview() {
+
+  const preview =
+    document.getElementById("mediaPreview");
+
+  preview.innerHTML = "";
+
+  selectedImages.forEach((file, index) => {
+
+    const url =
+      URL.createObjectURL(file);
+
+    const box =
+      document.createElement("div");
+
+    box.className = "media-box";
+
+    box.innerHTML = `
+      <img src="${url}" alt="Selected image ${index + 1}">
+      <span class="media-label">IMAGE ${index + 1}</span>
+    `;
+
+    preview.appendChild(box);
+  });
+
+  if (selectedVideo) {
+
+    const url =
+      URL.createObjectURL(selectedVideo);
+
+    const box =
+      document.createElement("div");
+
+    box.className = "media-box";
+
+    box.innerHTML = `
+      <video
+        src="${url}"
+        controls
+        muted
+        playsinline
+      ></video>
+      <span class="media-label">VIDEO</span>
+    `;
+
+    preview.appendChild(box);
+  }
+}
+
+async function uploadMedia(file) {
+
+  const form =
+    new FormData();
+
+  form.append("file", file);
+
+  const response =
+    await fetch(
+      `${API}/upload-media`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization":
+            `Bearer ${adminToken}`
+        },
+        body: form
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok || !data.ok) {
+    throw new Error(
+      data.error ||
+      "Media upload failed."
+    );
+  }
+
+  return data.url;
+}
+
+async function publishProduct() {
+
+  const title =
+    document
+      .getElementById("title")
+      .value
+      .trim();
+
+  const description =
+    document
+      .getElementById("description")
+      .value
+      .trim();
+
+  const affiliateUrl =
+    document
+      .getElementById("affiliateUrl")
+      .value
+      .trim();
+
+  const category =
+    document
+      .getElementById("category")
+      .value;
+
+  if (!title) {
+    showMessage(
+      "publishMessage",
+      "Enter a product title.",
+      "error"
+    );
+    return;
+  }
+
+  if (!affiliateUrl) {
+    showMessage(
+      "publishMessage",
+      "Enter the affiliate link.",
+      "error"
+    );
+    return;
+  }
+
+  if (
+    selectedImages.length === 0 &&
+    !selectedVideo
+  ) {
+    showMessage(
+      "publishMessage",
+      "Select at least one image or video.",
+      "error"
+    );
+    return;
+  }
+
+  const button =
+    document.getElementById("publishBtn");
+
+  button.disabled = true;
+  button.textContent = "UPLOADING...";
+
+  try {
+
+    const imageUrls = [];
+
+    for (
+      let i = 0;
+      i < selectedImages.length;
+      i++
+    ) {
+
+      showMessage(
+        "publishMessage",
+        `Uploading image ${i + 1} of ${selectedImages.length}...`
+      );
+
+      const url =
+        await uploadMedia(
+          selectedImages[i]
+        );
+
+      imageUrls.push(url);
+    }
+
+    let videoUrl = "";
+
+    if (selectedVideo) {
+
+      showMessage(
+        "publishMessage",
+        "Uploading video..."
+      );
+
+      videoUrl =
+        await uploadMedia(
+          selectedVideo
+        );
+    }
+
+    showMessage(
+      "publishMessage",
+      "Saving product..."
+    );
+
+    const response =
+      await fetch(
+        `${API}/products`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            "Authorization":
+              `Bearer ${adminToken}`
+          },
+          body: JSON.stringify({
+            title,
+            description,
+            affiliate_url:
+              affiliateUrl,
+            category,
+            images: imageUrls,
+            video_url: videoUrl
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.error ||
+        "Product could not be published."
+      );
+    }
+
+    showMessage(
+      "publishMessage",
+      "Product published successfully!",
+      "success"
+    );
+
+    clearForm();
+    await loadProducts();
+
+  } catch (error) {
+
+    showMessage(
+      "publishMessage",
+      error.message ||
+      "Something went wrong.",
+      "error"
+    );
+
+  } finally {
+
+    button.disabled = false;
+    button.textContent =
+      "PUBLISH PRODUCT";
+  }
+}
+
+function clearForm() {
+
+  document.getElementById("title").value = "";
+  document.getElementById("description").value = "";
+  document.getElementById("affiliateUrl").value = "";
+  document.getElementById("category").value = "Other";
+
+  document.getElementById("imageFiles").value = "";
+  document.getElementById("videoFile").value = "";
+
+  selectedImages = [];
+  selectedVideo = null;
+
+  document.getElementById(
+    "mediaPreview"
+  ).innerHTML = "";
+}
+
+async function loadProducts() {
+
+  const container =
+    document.getElementById("products");
+
+  container.innerHTML =
+    '<div class="loading">Loading products...</div>';
+
+  try {
+
+    const response =
+      await fetch(
+        `${API}/admin/products`,
+        {
+          headers: {
+            "Authorization":
+              `Bearer ${adminToken}`
+          }
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+        "Could not load products."
+      );
+    }
+
+    const products =
+      data.products || [];
+
+    if (!products.length) {
+      container.innerHTML =
+        '<div class="loading">No products yet.</div>';
+      return;
+    }
+
+    container.innerHTML = "";
+
+    products.forEach(product => {
+
+      const item =
+        document.createElement("div");
+
+      item.className = "product";
+
+      const image =
+        product.image1_url
+          ? `<img src="${escapeHtml(product.image1_url)}" alt="">`
+          : "";
+
+      item.innerHTML = `
+        ${image}
+
+        <div class="product-info">
+          <div class="product-title">
+            ${escapeHtml(product.title)}
+          </div>
+
+          <div class="product-meta">
+            ID: ${product.id}
+            · ${escapeHtml(product.category)}
+          </div>
+        </div>
+
+        <button
+          class="danger"
+          onclick="deleteProduct(${product.id})"
+        >
+          DELETE
+        </button>
+      `;
+
+      container.appendChild(item);
+    });
+
+  } catch (error) {
+
+    container.innerHTML = `
+      <div class="message error">
+        ${escapeHtml(
+          error.message ||
+          "Could not load products."
+        )}
+      </div>
+    `;
+  }
+}
+
+async function deleteProduct(id) {
+
+  const confirmed =
+    confirm(
+      "Delete this product and its uploaded media?"
+    );
+
+  if (!confirmed) return;
+
+  try {
+
+    const response =
+      await fetch(
+        `${API}/products/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Authorization":
+              `Bearer ${adminToken}`
+          }
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.error ||
+        "Could not delete product."
+      );
+    }
+
+    showMessage(
+      "publishMessage",
+      "Product deleted.",
+      "success"
+    );
+
+    loadProducts();
+
+  } catch (error) {
+
+    showMessage(
+      "publishMessage",
+      error.message ||
+      "Delete failed.",
+      "error"
+    );
+  }
+}
+
+function logout() {
+
+  adminToken = "";
+
+  document
+    .getElementById("adminArea")
+    .classList.add("hidden");
+
+  document
+    .getElementById("loginCard")
+    .classList.remove("hidden");
+
+  document
+    .getElementById("adminPassword")
+    .value = "";
+
+  clearForm();
+}
+
+function escapeHtml(value) {
+
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+</script>
+
+</body>
+</html>
