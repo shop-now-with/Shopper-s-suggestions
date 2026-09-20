@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Shopper's Suggestions — Coming Soon</title>
+
+<style>
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
+
+html,body{
+  width:100%;
+  min-height:100%;
+}
+
+body{
+  font-family:Arial,Helvetica,sans-serif;
+  background:#fff;
+  color:#111;
+  overflow-x:hidden;
+}
+
+/* =========================
+   BACKGROUND
+========================= */
+
+.background{
+  position:fixed;
+  inset:0;
+  overflow:hidden;
+  pointer-events:none;
+  z-index:0;
+}
+
+.bg-orb{
+  position:absolute;
+  width:320px;
+  height:320px;
+  border-radius:50%;
+  filter:blur(70px);
+  opacity:.12;
+  animation:orbMove 10s ease-in-out infinite alternate;
+}
+
+.orb1{
+  background:#ff7900;
+  top:-120px;
+  left:-100px;
+}
+
+.orb2{
+  background:#173b8f;
+  right:-130px;
+  bottom:-120px;
+  animation-delay:-4s;
+}
+
+.bg-line{
+  position:absolute;
+  width:180%;
+  height:1px;
+  background:linear-gradient(
+    90deg,
+    transparent,
+    rgba(20,45,100,.12),
+    transparent
+  );
+  transform:rotate(-18deg);
+  animation:lineMove 8s linear infinite;
+}
+
+.line1{top:30%;}
+.line2{
+  top:65%;
+  animation-delay:-4s;
+}
+
+@keyframes orbMove{
+  from{transform:translate(0,0) scale(1);}
+  to{transform:translate(80px,50px) scale(1.2);}
+}
+
+@keyframes lineMove{
+  from{transform:translateX(-25%) rotate(-18deg);}
+  to{transform:translateX(25%) rotate(-18deg);}
+}
+
+/* =========================
+   MAIN
+========================= */
+
+.page{
+  position:relative;
+  z-index:2;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  padding:45px 18px 55px;
+}
+
+.content{
+  width:min(960px,100%);
+  text-align:center;
+}
+
+/* =========================
+   LOGO
+========================= */
+
+.logo-wrap{
+  display:flex;
+  justify-content:center;
+  margin-bottom:20px;
+}
+
+.logo{
+  width:92px;
+  height:92px;
+  object-fit:contain;
+  border-radius:22px;
+  background:#fff;
+  padding:7px;
+  box-shadow:
+    0 12px 35px rgba(0,0,0,.08);
+  animation:logoFloat 4s ease-in-out infinite;
+}
+
+@keyframes logoFloat{
+  0%,100%{
+    transform:translateY(0) rotate(0deg);
+  }
+  50%{
+    transform:translateY(-7px) rotate(1deg);
+  }
+}
+
+/* =========================
+   TEXT
+========================= */
+
+.brand{
+  font-size:clamp(13px,2vw,15px);
+  font-weight:800;
+  letter-spacing:4px;
+  color:#173b8f;
+  text-transform:uppercase;
+  margin-bottom:12px;
+}
+
+h1{
+  font-size:clamp(34px,7vw,72px);
+  line-height:.95;
+  font-weight:950;
+  letter-spacing:-3px;
+  margin-bottom:18px;
+  background:linear-gradient(
+    100deg,
+    #ff7100,
+    #173b8f
+  );
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+.subtitle{
+  max-width:620px;
+  margin:0 auto 30px;
+  color:#555;
+  font-size:clamp(14px,2.5vw,17px);
+  line-height:1.7;
+}
+
+/* =========================
+   MAINTENANCE PILL
+========================= */
+
+.status{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  padding:9px 15px;
+  border:1px solid rgba(23,59,143,.14);
+  background:rgba(255,255,255,.78);
+  border-radius:999px;
+  font-size:12px;
+  font-weight:800;
+  color:#173b8f;
+  margin-bottom:25px;
+  box-shadow:0 8px 25px rgba(0,0,0,.04);
+}
+
+.status-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#ff7100;
+  box-shadow:0 0 0 0 rgba(255,113,0,.45);
+  animation:pulse 1.7s infinite;
+}
+
+@keyframes pulse{
+  70%{
+    box-shadow:0 0 0 9px rgba(255,113,0,0);
+  }
+  100%{
+    box-shadow:0 0 0 0 rgba(255,113,0,0);
+  }
+}
+
+/* =========================
+   GAME
+========================= */
+
+.game-shell{
+  position:relative;
+  width:100%;
+  max-width:900px;
+  margin:0 auto;
+  border-radius:26px;
+  overflow:hidden;
+  background:#111;
+  box-shadow:
+    0 25px 70px rgba(0,0,0,.16),
+    0 0 0 1px rgba(0,0,0,.06);
+  cursor:pointer;
+  touch-action:manipulation;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+canvas{
+  display:block;
+  width:100%;
+  height:auto;
+  aspect-ratio:900/360;
+  background:#111;
+}
+
+.game-hud{
+  position:absolute;
+  top:15px;
+  left:16px;
+  right:16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  pointer-events:none;
+  z-index:4;
+}
+
+.hud-box{
+  color:#fff;
+  font-family:monospace;
+  font-weight:900;
+  letter-spacing:1px;
+  text-align:left;
+  text-shadow:0 2px 5px rgba(0,0,0,.5);
+}
+
+.hud-label{
+  font-size:9px;
+  opacity:.65;
+  margin-bottom:3px;
+}
+
+.hud-value{
+  font-size:17px;
+}
+
+.best{
+  text-align:right;
+}
+
+/* =========================
+   START SCREEN
+========================= */
+
+.start-screen{
+  position:absolute;
+  inset:0;
+  z-index:5;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+  color:#fff;
+  pointer-events:none;
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(0,0,0,.12),
+      rgba(0,0,0,.42)
+    );
+  transition:opacity .35s ease;
+}
+
+.start-screen.hidden{
+  opacity:0;
+}
+
+.pixel-title{
+  font-family:monospace;
+  font-weight:900;
+  font-size:clamp(20px,5vw,34px);
+  letter-spacing:3px;
+  text-shadow:
+    3px 3px 0 #173b8f,
+    -1px -1px 0 rgba(255,113,0,.7);
+  animation:titlePulse 1.8s ease-in-out infinite;
+}
+
+.start-text{
+  margin-top:10px;
+  font-family:monospace;
+  font-size:11px;
+  letter-spacing:2px;
+  opacity:.72;
+}
+
+@keyframes titlePulse{
+  0%,100%{
+    transform:scale(1);
+    opacity:.85;
+  }
+  50%{
+    transform:scale(1.035);
+    opacity:1;
+  }
+}
+
+/* =========================
+   GAME OVER
+========================= */
+
+.game-over{
+  position:absolute;
+  inset:0;
+  z-index:8;
+  display:none;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+  background:rgba(0,0,0,.52);
+  backdrop-filter:blur(2px);
+  color:#fff;
+}
+
+.game-over.show{
+  display:flex;
+  animation:gameOverIn .25s ease-out;
+}
+
+@keyframes gameOverIn{
+  from{
+    opacity:0;
+    transform:scale(.98);
+  }
+  to{
+    opacity:1;
+    transform:scale(1);
+  }
+}
+
+.fail-title{
+  font-family:monospace;
+  font-size:clamp(22px,6vw,38px);
+  font-weight:900;
+  letter-spacing:4px;
+  margin-bottom:9px;
+}
+
+.final-score{
+  font-family:monospace;
+  font-size:12px;
+  opacity:.8;
+  margin-bottom:18px;
+}
+
+.retry{
+  border:2px solid #fff;
+  background:#fff;
+  color:#111;
+  padding:11px 22px;
+  font-family:monospace;
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:2px;
+  cursor:pointer;
+  clip-path:polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+  transition:
+    transform .15s ease,
+    background .15s ease,
+    color .15s ease;
+}
+
+.retry:hover{
+  transform:translateY(-2px);
+  background:#ff7100;
+  color:#fff;
+}
+
+.retry:active{
+  transform:scale(.94);
+}
+
+/* =========================
+   GAME HINT
+========================= */
+
+.game-hint{
+  margin-top:13px;
+  color:#777;
+  font-family:monospace;
+  font-size:10px;
+  letter-spacing:1.4px;
+  text-transform:uppercase;
+}
+
+/* =========================
+   FOOTER
+========================= */
+
+.footer{
+  margin-top:32px;
+  color:#999;
+  font-size:11px;
+  letter-spacing:.5px;
+}
+
+.footer strong{
+  color:#173b8f;
+}
+
+/* =========================
+   MOBILE
+========================= */
+
+@media(max-width:600px){
+
+  .page{
+    padding:32px 12px 45px;
+  }
+
+  .logo{
+    width:78px;
+    height:78px;
+    border-radius:18px;
+  }
+
+  h1{
+    letter-spacing:-2px;
+  }
+
+  .subtitle{
+    margin-bottom:25px;
+  }
+
+  .game-shell{
+    border-radius:19px;
+  }
+
+  .game-hud{
+    top:10px;
+    left:11px;
+    right:11px;
+  }
+
+  .hud-value{
+    font-size:14px;
+  }
+
+  .hud-label{
+    font-size:8px;
+  }
+
+  .game-hint{
+    font-size:9px;
+  }
+}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){
+
+  *,
+  *::before,
+  *::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="background">
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
+  <div class="bg-line line1"></div>
+  <div class="bg-line line2"></div>
+</div>
+
+<main class="page">
+
+  <section class="content">
+
+    <div class="logo-wrap">
+      <img
+        class="logo"
+        src="2E7A6582-42BB-48D4-84D8-71C3DA3ED841.jpeg"
+        alt="Shopper's Suggestions logo"
+      >
+    </div>
+
+    <div class="brand">
+      SHOPPER'S SUGGESTIONS
+    </div>
+
+    <div class="status">
+      <span class="status-dot"></span>
+      TEMPORARILY OFFLINE
+    </div>
+
+    <h1>
+      Something<br>
+      Worth Discovering.
+    </h1>
+
+    <p class="subtitle">
+      We're upgrading the experience behind the scenes.
+      While you wait, there's a little something to discover.
+    </p>
+
+    <!-- GAME -->
+
+    <div
+      class="game-shell"
+      id="gameShell"
+      aria-label="Shopper Run game"
+    >
+
+      <canvas
+        id="gameCanvas"
+        width="900"
+        height="360"
+      ></canvas>
+
+      <div class="game-hud">
+
+        <div class="hud-box">
+          <div class="hud-label">SCORE</div>
+          <div class="hud-value" id="score">0000</div>
+        </div>
+
+        <div class="hud-box best">
+          <div class="hud-label">HIGH SCORE</div>
+          <div class="hud-value" id="highScore">0000</div>
+        </div>
+
+      </div>
+
+      <div
+        class="start-screen"
+        id="startScreen"
+      >
+        <div class="pixel-title">
+          SHOPPER RUN
+        </div>
+
+        <div class="start-text">
+          TAP TO START
+        </div>
+      </div>
+
+      <div
+        class="game-over"
+        id="gameOver"
+      >
+
+        <div class="fail-title">
+          GAME OVER
+        </div>
+
+        <div class="final-score" id="finalScore">
+          SCORE 0000
+        </div>
+
+        <button
+          class="retry"
+          id="retryButton"
+          type="button"
+        >
+          RETRY
+        </button>
+
+      </div>
+
+    </div>
+
+    <div class="game-hint">
+      TAP THE GAME TO START • TAP AGAIN TO JUMP
+    </div>
+
+    <div class="footer">
+      © <span id="year"></span>
+      <strong>Shopper's Suggestions</strong>
+      · Worth the wait.
+    </div>
+
+  </section>
+
+</main>
+
+<script>
+(() => {
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  const shell = document.getElementById("gameShell");
+  const startScreen = document.getElementById("startScreen");
+  const gameOver = document.getElementById("gameOver");
+  const retryButton = document.getElementById("retryButton");
+
+  const scoreEl = document.getElementById("score");
+  const highScoreEl = document.getElementById("highScore");
+  const finalScoreEl = document.getElementById("finalScore");
+
+  document.getElementById("year").textContent =
+    new Date().getFullYear();
+
+  let highScore =
+    Number(localStorage.getItem("shopperRunHighScore") || 0);
+
+  highScoreEl.textContent =
+    String(highScore).padStart(4, "0");
+
+  /* =========================
+     GAME STATE
+  ========================= */
+
+  let running = false;
+  let gameOverState = false;
+
+  let score = 0;
+  let speed = 5;
+
+  let lastTime = 0;
+  let spawnTimer = 0;
+  let nextSpawn = 1250;
+
+  let animationId = null;
+
+  const player = {
+    x:90,
+    y:270,
+    width:30,
+    height:30,
+    velocityY:0,
+    gravity:0.78,
+    jumpPower:-14,
+    grounded:true
+  };
+
+  let obstacles = [];
+  let particles = [];
+  let stars = [];
+
+  /* =========================
+     BACKGROUND STARS
+  ========================= */
+
+  for(let i=0;i<65;i++){
+
+    stars.push({
+      x:Math.random()*900,
+      y:Math.random()*300,
+      size:Math.random()*2+0.5,
+      speed:Math.random()*.45+.1,
+      alpha:Math.random()*.55+.2
+    });
+
+  }
+
+  /* =========================
+     HELPERS
+  ========================= */
+
+  function random(min,max){
+    return Math.random()*(max-min)+min;
+  }
+
+  function rectCollision(a,b){
+
+    return (
+      a.x < b.x+b.width &&
+      a.x+a.width > b.x &&
+      a.y < b.y+b.height &&
+      a.y+a.height > b.y
+    );
+
+  }
+
+  function resetPlayer(){
+
+    player.y = 270;
+    player.velocityY = 0;
+    player.grounded = true;
+
+  }
+
+  function resetGame(){
+
+    score = 0;
+    speed = 5;
+
+    spawnTimer = 0;
+    nextSpawn = 1150;
+
+    obstacles = [];
+    particles = [];
+
+    resetPlayer();
+
+    scoreEl.textContent = "0000";
+
+  }
+
+  /* =========================
+     START
+  ========================= */
+
+  function startGame(){
+
+    resetGame();
+
+    running = true;
+    gameOverState = false;
+
+    startScreen.classList.add("hidden");
+    gameOver.classList.remove("show");
+
+    lastTime = performance.now();
+
+    if(animationId){
+      cancelAnimationFrame(animationId);
+    }
+
+    animationId =
+      requestAnimationFrame(loop);
+
+  }
+
+  /* =========================
+     GAME OVER
+  ========================= */
+
+  function endGame(){
+
+    running = false;
+    gameOverState = true;
+
+    if(score > highScore){
+
+      highScore = score;
+
+      localStorage.setItem(
+        "shopperRunHighScore",
+        String(highScore)
+      );
+
+      highScoreEl.textContent =
+        String(highScore).padStart(4,"0");
+
+    }
+
+    finalScoreEl.textContent =
+      "SCORE " +
+      String(score).padStart(4,"0");
+
+    gameOver.classList.add("show");
+
+  }
+
+  /* =========================
+     JUMP
+  ========================= */
+
+  function jump(){
+
+    if(!running){
+      return;
+    }
+
+    if(player.grounded){
+
+      player.velocityY =
+        player.jumpPower;
+
+      player.grounded = false;
+
+      createJumpParticles();
+
+    }
+
+  }
+
+  /* =========================
+     INPUT
+  ========================= */
+
+  shell.addEventListener(
+    "pointerdown",
+    event => {
+
+      if(
+        event.target === retryButton ||
+        retryButton.contains(event.target)
+      ){
+        return;
+      }
+
+      event.preventDefault();
+
+      if(!running && !gameOverState){
+
+        startGame();
+        return;
+
+      }
+
+      if(running){
+
+        jump();
+
+      }
+
+    },
+    {passive:false}
+  );
+
+  retryButton.addEventListener(
+    "pointerdown",
+    event => {
+
+      event.stopPropagation();
+
+      startGame();
+
+    }
+  );
+
+  document.addEventListener(
+    "keydown",
+    event => {
+
+      if(
+        event.code === "Space" ||
+        event.code === "ArrowUp"
+      ){
+
+        event.preventDefault();
+
+        if(!running && !gameOverState){
+
+          startGame();
+
+        }else if(running){
+
+          jump();
+
+        }
+
+      }
+
+      if(
+        event.code === "Enter" &&
+        gameOverState
+      ){
+
+        startGame();
+
+      }
+
+    }
+  );
+
+  /* =========================
+     OBSTACLES
+  ========================= */
+
+  function createObstacle(){
+
+    const type =
+      Math.random() < .72
+      ? "block"
+      : "tall";
+
+    const width =
+      type === "block"
+      ? random(24,38)
+      : random(20,27);
+
+    const height =
+      type === "block"
+      ? random(25,42)
+      : random(43,65);
+
+    obstacles.push({
+      x:930,
+      y:300-height,
+      width,
+      height,
+      type
+    });
+
+  }
+
+  /* =========================
+     PARTICLES
+  ========================= */
+
+  function createParticle(x,y){
+
+    particles.push({
+
+      x,
+      y,
+
+      velocityX:random(-2,2),
+      velocityY:random(-3,-.5),
+
+      size:random(2,5),
+
+      life:1
+
+    });
+
+  }
+
+  function createJumpParticles(){
+
+    for(let i=0;i<8;i++){
+
+      createParticle(
+        player.x+15,
+        player.y+30
+      );
+
+    }
+
+  }
+
+  /* =========================
+     DRAW BACKGROUND
+  ========================= */
+
+  function drawBackground(){
+
+    ctx.fillStyle="#111";
+    ctx.fillRect(0,0,900,360);
+
+    /* subtle grid */
+
+    ctx.strokeStyle="rgba(255,255,255,.035)";
+    ctx.lineWidth=1;
+
+    for(let x=0;x<900;x+=45){
+
+      ctx.beginPath();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x,360);
+      ctx.stroke();
+
+    }
+
+    for(let y=0;y<360;y+=45){
+
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(900,y);
+      ctx.stroke();
+
+    }
+
+    /* stars */
+
+    stars.forEach(star => {
+
+      star.x -= star.speed;
+
+      if(star.x < -5){
+        star.x = 905;
+      }
+
+      ctx.globalAlpha = star.alpha;
+
+      ctx.fillStyle="#fff";
+
+      ctx.fillRect(
+        Math.round(star.x),
+        Math.round(star.y),
+        star.size,
+        star.size
+      );
+
+    });
+
+    ctx.globalAlpha=1;
+
+    /* distant moving lines */
+
+    const t =
+      performance.now()*.025;
+
+    for(let i=0;i<7;i++){
+
+      const x =
+        ((t*(i+1)*.35)%1000)-100;
+
+      ctx.fillStyle =
+        "rgba(255,255,255,.025)";
+
+      ctx.fillRect(
+        x,
+        75+i*31,
+        65,
+        1
+      );
+
+    }
+
+    /* ground */
+
+    ctx.fillStyle="#181818";
+
+    ctx.fillRect(
+      0,
+      300,
+      900,
+      60
+    );
+
+    ctx.fillStyle="#fff";
+
+    ctx.globalAlpha=.12;
+
+    ctx.fillRect(
+      0,
+      299,
+      900,
+      2
+    );
+
+    ctx.globalAlpha=1;
+
+    /* moving ground pixels */
+
+    const groundOffset =
+      (performance.now()*.15)%50;
+
+    for(let x=-50;x<950;x+=50){
+
+      ctx.fillStyle="rgba(255,255,255,.09)";
+
+      ctx.fillRect(
+        x-groundOffset,
+        315,
+        20,
+        2
+      );
+
+    }
+
+  }
+
+  /* =========================
+     DRAW PLAYER
+  ========================= */
+
+  function drawPlayer(){
+
+    const x =
+      Math.round(player.x);
+
+    const y =
+      Math.round(player.y);
+
+    /* shadow */
+
+    ctx.fillStyle="rgba(0,0,0,.5)";
+
+    ctx.fillRect(
+      x-3,
+      300,
+      36,
+      4
+    );
+
+    /* body */
+
+    ctx.fillStyle="#fff";
+
+    ctx.fillRect(
+      x,
+      y,
+      player.width,
+      player.height
+    );
+
+    /* orange pixel */
+
+    ctx.fillStyle="#ff7100";
+
+    ctx.fillRect(
+      x+6,
+      y+6,
+      8,
+      8
+    );
+
+    /* blue pixel */
+
+    ctx.fillStyle="#173b8f";
+
+    ctx.fillRect(
+      x+17,
+      y+17,
+      7,
+      7
+    );
+
+    /* eye */
+
+    ctx.fillStyle="#111";
+
+    ctx.fillRect(
+      x+21,
+      y+5,
+      4,
+      4
+    );
+
+  }
+
+  /* =========================
+     DRAW OBSTACLES
+  ========================= */
+
+  function drawObstacle(obstacle){
+
+    const x =
+      Math.round(obstacle.x);
+
+    const y =
+      Math.round(obstacle.y);
+
+    ctx.fillStyle="#ff7100";
+
+    ctx.fillRect(
+      x,
+      y,
+      obstacle.width,
+      obstacle.height
+    );
+
+    ctx.fillStyle="#fff";
+
+    for(
+      let py=y+5;
+      py<y+obstacle.height-2;
+      py+=9
+    ){
+
+      ctx.fillRect(
+        x+4,
+        py,
+        Math.min(5,obstacle.width-7),
+        2
+      );
+
+    }
+
+  }
+
+  /* =========================
+     DRAW PARTICLES
+  ========================= */
+
+  function drawParticles(){
+
+    particles.forEach(p => {
+
+      ctx.globalAlpha =
+        Math.max(0,p.life);
+
+      ctx.fillStyle="#fff";
+
+      ctx.fillRect(
+        p.x,
+        p.y,
+        p.size,
+        p.size
+      );
+
+    });
+
+    ctx.globalAlpha=1;
+
+  }
+
+  /* =========================
+     UPDATE
+  ========================= */
+
+  function update(delta){
+
+    const dt =
+      Math.min(delta,32);
+
+    /* player */
+
+    player.velocityY +=
+      player.gravity*(dt/16);
+
+    player.y +=
+      player.velocityY*(dt/16);
+
+    if(player.y >= 270){
+
+      player.y=270;
+
+      player.velocityY=0;
+
+      if(!player.grounded){
+
+        createJumpParticles();
+
+      }
+
+      player.grounded=true;
+
+    }
+
+    /* score */
+
+    score +=
+      0.035*(dt/16)*speed;
+
+    const displayScore =
+      Math.floor(score);
+
+    scoreEl.textContent =
+      String(displayScore).padStart(4,"0");
+
+    /* difficulty */
+
+    speed =
+      5 +
+      Math.min(7,score/130);
+
+    /* spawn */
+
+    spawnTimer += dt;
+
+    if(spawnTimer >= nextSpawn){
+
+      createObstacle();
+
+      spawnTimer=0;
+
+      const difficulty =
+        Math.min(420,score*1.4);
+
+      nextSpawn =
+        random(
+          Math.max(570,850-difficulty),
+          Math.max(820,1250-difficulty)
+        );
+
+    }
+
+    /* obstacles */
+
+    obstacles.forEach(obstacle => {
+
+      obstacle.x -=
+        speed*(dt/16);
+
+    });
+
+    obstacles =
+      obstacles.filter(
+        obstacle => obstacle.x > -80
+      );
+
+    /* collisions */
+
+    const hitbox = {
+      x:player.x+5,
+      y:player.y+4,
+      width:player.width-9,
+      height:player.height-5
+    };
+
+    for(const obstacle of obstacles){
+
+      const obstacleBox = {
+        x:obstacle.x+2,
+        y:obstacle.y+2,
+        width:obstacle.width-4,
+        height:obstacle.height-2
+      };
+
+      if(rectCollision(hitbox,obstacleBox)){
+
+        endGame();
+
+        return;
+
+      }
+
+    }
+
+    /* particles */
+
+    particles.forEach(p => {
+
+      p.x +=
+        p.velocityX*(dt/16);
+
+      p.y +=
+        p.velocityY*(dt/16);
+
+      p.velocityY +=
+        .12*(dt/16);
+
+      p.life -=
+        .035*(dt/16);
+
+    });
+
+    particles =
+      particles.filter(
+        p => p.life>0
+      );
+
+  }
+
+  /* =========================
+     RENDER
+  ========================= */
+
+  function render(){
+
+    drawBackground();
+
+    obstacles.forEach(drawObstacle);
+
+    drawParticles();
+
+    drawPlayer();
+
+  }
+
+  /* =========================
+     LOOP
+  ========================= */
+
+  function loop(timestamp){
+
+    if(!running){
+
+      render();
+
+      return;
+
+    }
+
+    const delta =
+      timestamp-lastTime;
+
+    lastTime=timestamp;
+
+    update(delta);
+
+    render();
+
+    if(running){
+
+      animationId =
+        requestAnimationFrame(loop);
+
+    }
+
+  }
+
+  /* =========================
+     INITIAL FRAME
+  ========================= */
+
+  render();
+
+})();
+</script>
+
+</body>
+</html>
