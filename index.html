@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Shopper’s Suggestions — Coming Back Soon</title>
+
+  <meta
+    name="description"
+    content="Shopper’s Suggestions is temporarily under maintenance. We'll be back soon."
+  >
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Helvetica, Arial, sans-serif;
+      background: #ffffff;
+      color: #101828;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 900px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 22px;
+      position: relative;
+    }
+
+    .glow {
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      background: linear-gradient(
+        135deg,
+        rgba(255, 122, 0, 0.10),
+        rgba(0, 62, 130, 0.08)
+      );
+      filter: blur(70px);
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 680px;
+      text-align: center;
+      padding: 55px 35px;
+      border: 1px solid #e7e7e7;
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.08);
+      position: relative;
+      z-index: 2;
+      animation: appear 0.8s ease forwards;
+    }
+
+    .logo {
+      width: 90px;
+      height: 90px;
+      object-fit: contain;
+      border-radius: 22px;
+      margin-bottom: 25px;
+      animation: logoFloat 4s ease-in-out infinite;
+    }
+
+    .brand {
+      font-size: clamp(28px, 6vw, 48px);
+      font-weight: 800;
+      letter-spacing: -1.8px;
+      line-height: 1.05;
+      background: linear-gradient(
+        100deg,
+        #ff6a00,
+        #ff8a00,
+        #003b7a
+      );
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 18px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: #f5f6f8;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff7900;
+      animation: pulse 1.6s infinite;
+    }
+
+    h1 {
+      font-size: clamp(25px, 5vw, 38px);
+      letter-spacing: -1px;
+      margin-bottom: 15px;
+    }
+
+    .description {
+      max-width: 500px;
+      margin: 0 auto;
+      color: #667085;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .line {
+      width: 80px;
+      height: 4px;
+      border-radius: 10px;
+      margin: 30px auto;
+      background: linear-gradient(
+        90deg,
+        #ff6a00,
+        #003b7a
+      );
+    }
+
+    .footer {
+      color: #98a2b3;
+      font-size: 13px;
+    }
+
+    @keyframes appear {
+      from {
+        opacity: 0;
+        transform: translateY(25px) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes float {
+      0%, 100% {
+        transform: translate(0, 0);
+      }
+
+      50% {
+        transform: translate(25px, -20px);
+      }
+    }
+
+    @keyframes logoFloat {
+      0%, 100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-7px);
+      }
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 121, 0, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 9px rgba(255, 121, 0, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 121, 0, 0);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .page {
+        padding: 18px;
+      }
+
+      .card {
+        padding: 45px 23px;
+        border-radius: 24px;
+      }
+
+      .logo {
+        width: 78px;
+        height: 78px;
+        border-radius: 19px;
+      }
+
+      .description {
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <main class="page">
+
+    <div class="glow"></div>
+
+    <section class="card">
+
+      <img
+        class="logo"
+        src="2E7A6582-42BB-48D4-84D8-71C3DA3ED841.jpeg"
+        alt="Shopper's Suggestions"
+      >
+
+      <div class="status">
+        <span class="dot"></span>
+        Temporarily unavailable
+      </div>
+
+      <div class="brand">
+        Shopper’s Suggestions
+      </div>
+
+      <h1>
+        We’re making a few improvements.
+      </h1>
+
+      <p class="description">
+        Our website is temporarily under maintenance while
+        we work on some updates. We’ll be back soon with
+        a better shopping experience.
+      </p>
+
+      <div class="line"></div>
+
+      <p class="footer">
+        Thank you for your patience.
+      </p>
+
+    </section>
+
+  </main>
+
+</body>
+</html>
