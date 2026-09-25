@@ -1,0 +1,8 @@
+{
+  "name": "shoppers-suggestions-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "grammy": "^1.38.2"
+  }
+}
