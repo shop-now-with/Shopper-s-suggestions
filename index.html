@@ -1,0 +1,4312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+
+<title>Shopper's Suggestions</title>
+
+<style>
+
+/* =========================================================
+   RESET
+========================================================= */
+
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
+
+html{
+  scroll-behavior:smooth;
+}
+
+body{
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  background:#fff;
+  color:#0b1730;
+
+  overflow-x:hidden;
+}
+
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+
+.background{
+  position:fixed;
+  inset:0;
+  overflow:hidden;
+  pointer-events:none;
+  z-index:-20;
+  background:#fff;
+}
+
+.orb{
+  position:absolute;
+  border-radius:50%;
+  filter:blur(75px);
+  pointer-events:none;
+}
+
+.orb.one{
+  width:430px;
+  height:430px;
+  left:-180px;
+  top:8%;
+  background:#ff6f12;
+  opacity:.25;
+
+  animation:
+    orbOne 15s ease-in-out infinite alternate;
+}
+
+.orb.two{
+  width:520px;
+  height:520px;
+  right:-230px;
+  top:38%;
+  background:#155b9e;
+  opacity:.23;
+
+  animation:
+    orbTwo 18s ease-in-out infinite alternate;
+}
+
+.orb.three{
+  width:320px;
+  height:320px;
+  left:35%;
+  bottom:-180px;
+  background:#ff9c57;
+  opacity:.15;
+
+  animation:
+    orbThree 13s ease-in-out infinite alternate;
+}
+
+@keyframes orbOne{
+
+  0%{
+    transform:
+      translate(0,0)
+      scale(.8);
+  }
+
+  50%{
+    transform:
+      translate(180px,100px)
+      scale(1.2);
+  }
+
+  100%{
+    transform:
+      translate(50px,300px)
+      scale(.9);
+  }
+
+}
+
+@keyframes orbTwo{
+
+  0%{
+    transform:
+      translate(0,0)
+      scale(1);
+  }
+
+  50%{
+    transform:
+      translate(-160px,-120px)
+      scale(.78);
+  }
+
+  100%{
+    transform:
+      translate(-50px,190px)
+      scale(1.18);
+  }
+
+}
+
+@keyframes orbThree{
+
+  0%{
+    transform:
+      translate(0,0)
+      scale(.8);
+  }
+
+  100%{
+    transform:
+      translate(130px,-130px)
+      scale(1.2);
+  }
+
+}
+
+
+/* =========================================================
+   MOVING LIGHT LINES
+========================================================= */
+
+.light-lines{
+  position:absolute;
+  inset:0;
+  overflow:hidden;
+}
+
+.light-lines span{
+  position:absolute;
+
+  width:48vw;
+  height:1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(255,106,0,.45),
+      rgba(14,57,99,.35),
+      transparent
+    );
+
+  animation:
+    lineMove 11s linear infinite;
+}
+
+.light-lines span:nth-child(1){
+  top:9%;
+  left:-50%;
+}
+
+.light-lines span:nth-child(2){
+  top:24%;
+  left:-60%;
+  animation-delay:2s;
+}
+
+.light-lines span:nth-child(3){
+  top:42%;
+  left:-40%;
+  animation-delay:4s;
+}
+
+.light-lines span:nth-child(4){
+  top:64%;
+  left:-55%;
+  animation-delay:6s;
+}
+
+.light-lines span:nth-child(5){
+  top:81%;
+  left:-45%;
+  animation-delay:8s;
+}
+
+@keyframes lineMove{
+
+  from{
+    transform:
+      translateX(0)
+      rotate(-5deg);
+  }
+
+  to{
+    transform:
+      translateX(250vw)
+      rotate(-5deg);
+  }
+
+}
+
+
+/* =========================================================
+   FLOATING PARTICLES
+========================================================= */
+
+.particles{
+  position:absolute;
+  inset:0;
+}
+
+.particle{
+  position:absolute;
+
+  width:4px;
+  height:4px;
+
+  border-radius:50%;
+
+  background:#ff7015;
+
+  box-shadow:
+    0 0 14px rgba(255,112,21,.8);
+
+  animation:
+    particleFloat 9s ease-in-out infinite;
+}
+
+.particle:nth-child(1){
+  left:6%;
+  top:18%;
+}
+
+.particle:nth-child(2){
+  left:14%;
+  top:67%;
+  animation-delay:-2s;
+}
+
+.particle:nth-child(3){
+  left:28%;
+  top:35%;
+  animation-delay:-4s;
+}
+
+.particle:nth-child(4){
+  left:43%;
+  top:77%;
+  animation-delay:-6s;
+}
+
+.particle:nth-child(5){
+  left:58%;
+  top:23%;
+  animation-delay:-3s;
+}
+
+.particle:nth-child(6){
+  left:72%;
+  top:56%;
+  animation-delay:-5s;
+}
+
+.particle:nth-child(7){
+  left:84%;
+  top:17%;
+  animation-delay:-7s;
+}
+
+.particle:nth-child(8){
+  left:94%;
+  top:81%;
+  animation-delay:-1s;
+}
+
+.particle:nth-child(9){
+  left:51%;
+  top:45%;
+  animation-delay:-8s;
+}
+
+@keyframes particleFloat{
+
+  0%,100%{
+    transform:
+      translate(0,0)
+      scale(.6);
+
+    opacity:.15;
+  }
+
+  50%{
+    transform:
+      translate(35px,-60px)
+      scale(1.6);
+
+    opacity:.85;
+  }
+
+}
+
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+header{
+  position:sticky;
+  top:0;
+  z-index:1000;
+
+  background:
+    rgba(255,255,255,.82);
+
+  backdrop-filter:
+    blur(25px);
+
+  border-bottom:
+    1px solid rgba(15,40,75,.08);
+
+  animation:
+    headerAppear .8s ease both;
+}
+
+@keyframes headerAppear{
+
+  from{
+    opacity:0;
+    transform:translateY(-25px);
+  }
+
+  to{
+    opacity:1;
+    transform:none;
+  }
+
+}
+
+.nav{
+  max-width:1320px;
+  margin:auto;
+
+  min-height:76px;
+
+  padding:
+    8px 4%;
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:space-between;
+}
+
+
+/* =========================================================
+   BRAND
+========================================================= */
+
+.brand{
+  display:flex;
+
+  align-items:center;
+
+  gap:12px;
+
+  text-decoration:none;
+
+  min-width:0;
+}
+
+.logo{
+  width:105px;
+  height:55px;
+
+  object-fit:contain;
+
+  flex-shrink:0;
+
+  animation:
+    logoFloat 5s ease-in-out infinite;
+}
+
+@keyframes logoFloat{
+
+  0%,100%{
+    transform:
+      translateY(0)
+      scale(1);
+  }
+
+  50%{
+    transform:
+      translateY(-2px)
+      scale(1.035);
+  }
+
+}
+
+.brand-name{
+  font-size:clamp(17px,2.1vw,25px);
+
+  line-height:1;
+
+  font-weight:900;
+
+  letter-spacing:-.8px;
+
+  white-space:nowrap;
+
+  background:
+    linear-gradient(
+      100deg,
+      #ff6900,
+      #ff832e 34%,
+      #0b2e59 67%,
+      #165f9e
+    );
+
+  -webkit-background-clip:text;
+
+  background-clip:text;
+
+  color:transparent;
+
+  background-size:230% auto;
+
+  animation:
+    brandGradient 7s linear infinite;
+}
+
+@keyframes brandGradient{
+
+  to{
+    background-position:230% center;
+  }
+
+}
+
+
+/* =========================================================
+   MENU BUTTON
+========================================================= */
+
+.menu-button{
+  width:48px;
+  height:48px;
+
+  border:none;
+
+  border-radius:15px;
+
+  background:
+    rgba(255,255,255,.8);
+
+  box-shadow:
+    0 8px 25px rgba(15,40,75,.08);
+
+  display:flex;
+
+  align-items:center;
+  justify-content:center;
+
+  cursor:pointer;
+
+  transition:.35s;
+}
+
+.menu-button:hover{
+  transform:
+    translateY(-2px)
+    rotate(2deg);
+
+  box-shadow:
+    0 14px 35px rgba(15,40,75,.13);
+}
+
+.menu-icon{
+  width:21px;
+  height:16px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  justify-content:space-between;
+}
+
+.menu-icon span{
+  width:100%;
+  height:2px;
+
+  border-radius:20px;
+
+  background:#0b1730;
+
+  transition:.35s;
+}
+
+.menu-button.open .menu-icon span:nth-child(1){
+  transform:
+    translateY(7px)
+    rotate(45deg);
+}
+
+.menu-button.open .menu-icon span:nth-child(2){
+  opacity:0;
+}
+
+.menu-button.open .menu-icon span:nth-child(3){
+  transform:
+    translateY(-7px)
+    rotate(-45deg);
+}
+
+
+/* =========================================================
+   SIDE MENU
+========================================================= */
+
+.menu-overlay{
+  position:fixed;
+
+  inset:0;
+
+  z-index:900;
+
+  background:
+    rgba(5,17,31,.18);
+
+  backdrop-filter:
+    blur(5px);
+
+  opacity:0;
+
+  pointer-events:none;
+
+  transition:.35s;
+}
+
+.menu-overlay.show{
+  opacity:1;
+
+  pointer-events:auto;
+}
+
+.side-menu{
+  position:fixed;
+
+  z-index:950;
+
+  top:0;
+  right:0;
+
+  width:min(390px,88vw);
+
+  height:100vh;
+
+  padding:
+    105px 28px 30px;
+
+  background:
+    rgba(255,255,255,.94);
+
+  backdrop-filter:
+    blur(30px);
+
+  border-left:
+    1px solid rgba(15,40,75,.08);
+
+  box-shadow:
+    -20px 0 70px rgba(15,40,75,.13);
+
+  transform:
+    translateX(105%);
+
+  transition:
+    transform .55s cubic-bezier(.2,.8,.2,1);
+}
+
+.side-menu.show{
+  transform:translateX(0);
+}
+
+.menu-title{
+  margin-bottom:28px;
+}
+
+.menu-title small{
+  display:block;
+
+  color:#ff6c0a;
+
+  font-size:11px;
+
+  font-weight:900;
+
+  text-transform:uppercase;
+
+  letter-spacing:2px;
+
+  margin-bottom:7px;
+}
+
+.menu-title h2{
+  font-size:29px;
+
+  letter-spacing:-1.2px;
+}
+
+.menu-links{
+  display:flex;
+
+  flex-direction:column;
+
+  gap:8px;
+}
+
+.menu-link{
+  border:none;
+
+  background:transparent;
+
+  text-align:left;
+
+  padding:
+    17px 16px;
+
+  border-radius:15px;
+
+  font-size:16px;
+
+  font-weight:750;
+
+  color:#0b1730;
+
+  cursor:pointer;
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:space-between;
+
+  transition:.3s;
+}
+
+.menu-link span:last-child{
+  color:#8c96a5;
+
+  font-size:20px;
+
+  transition:.3s;
+}
+
+.menu-link:hover{
+  background:
+    linear-gradient(
+      100deg,
+      rgba(255,106,0,.09),
+      rgba(16,65,110,.06)
+    );
+
+  transform:
+    translateX(5px);
+}
+
+.menu-link:hover span:last-child{
+  transform:
+    translateX(4px);
+
+  color:#ff6c0a;
+}
+
+
+/* =========================================================
+   PAGE SYSTEM
+========================================================= */
+
+.page{
+  display:none;
+
+  min-height:
+    calc(100vh - 76px);
+
+  animation:
+    pageEnter .65s cubic-bezier(.2,.8,.2,1);
+}
+
+.page.active{
+  display:block;
+}
+
+@keyframes pageEnter{
+
+  from{
+    opacity:0;
+    transform:
+      translateY(18px)
+      scale(.99);
+  }
+
+  to{
+    opacity:1;
+    transform:none;
+  }
+
+}
+
+
+/* =========================================================
+   HOME
+========================================================= */
+
+.home{
+  max-width:1300px;
+
+  margin:auto;
+
+  padding:
+    85px 5%
+    120px;
+
+  text-align:center;
+}
+
+.home-badge{
+  display:inline-flex;
+
+  align-items:center;
+
+  gap:8px;
+
+  padding:
+    9px 14px;
+
+  border-radius:99px;
+
+  background:
+    rgba(255,255,255,.75);
+
+  border:
+    1px solid rgba(15,40,75,.08);
+
+  box-shadow:
+    0 10px 30px rgba(15,40,75,.05);
+
+  color:#667085;
+
+  font-size:11px;
+
+  font-weight:850;
+
+  letter-spacing:1.1px;
+
+  text-transform:uppercase;
+
+  animation:
+    fadeUp 1s both;
+}
+
+.badge-dot{
+  width:7px;
+  height:7px;
+
+  border-radius:50%;
+
+  background:#ff6c0a;
+
+  box-shadow:
+    0 0 13px rgba(255,108,10,.7);
+
+  animation:
+    pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot{
+
+  0%,100%{
+    transform:scale(.8);
+    opacity:.55;
+  }
+
+  50%{
+    transform:scale(1.4);
+    opacity:1;
+  }
+
+}
+
+.home h1{
+  max-width:950px;
+
+  margin:
+    25px auto 0;
+
+  font-size:
+    clamp(43px,8vw,88px);
+
+  line-height:.94;
+
+  letter-spacing:-4px;
+
+  font-weight:950;
+
+  background:
+    linear-gradient(
+      105deg,
+      #ff6500,
+      #ff8a32 27%,
+      #0a2c55 62%,
+      #1765a8
+    );
+
+  background-size:250% auto;
+
+  -webkit-background-clip:text;
+
+  background-clip:text;
+
+  color:transparent;
+
+  animation:
+    heroGradient 7s linear infinite,
+    heroAppear 1s cubic-bezier(.2,.8,.2,1) both;
+}
+
+@keyframes heroGradient{
+
+  to{
+    background-position:250% center;
+  }
+
+}
+
+@keyframes heroAppear{
+
+  from{
+    opacity:0;
+
+    transform:
+      translateY(35px)
+      scale(.94);
+  }
+
+  to{
+    opacity:1;
+
+    transform:none;
+  }
+
+}
+
+.home-description{
+  max-width:650px;
+
+  margin:
+    25px auto 0;
+
+  color:#667085;
+
+  font-size:16px;
+
+  line-height:1.75;
+
+  animation:
+    fadeUp 1s .15s both;
+}
+
+
+/* =========================================================
+   BIG SEARCH
+========================================================= */
+
+.big-search{
+  max-width:850px;
+
+  margin:
+    45px auto 0;
+
+  position:relative;
+
+  animation:
+    searchAppear 1s .25s both;
+}
+
+@keyframes searchAppear{
+
+  from{
+    opacity:0;
+
+    transform:
+      translateY(25px)
+      scale(.96);
+  }
+
+  to{
+    opacity:1;
+
+    transform:none;
+  }
+
+}
+
+.big-search-box{
+  position:relative;
+
+  height:78px;
+
+  display:flex;
+
+  align-items:center;
+
+  padding:
+    8px;
+
+  border-radius:23px;
+
+  background:
+    rgba(255,255,255,.85);
+
+  border:
+    1px solid rgba(15,40,75,.1);
+
+  box-shadow:
+    0 20px 65px rgba(15,40,75,.1);
+
+  backdrop-filter:
+    blur(20px);
+
+  transition:.35s;
+}
+
+.big-search-box:focus-within{
+  transform:
+    translateY(-3px);
+
+  border-color:
+    rgba(255,108,10,.4);
+
+  box-shadow:
+    0 25px 75px rgba(15,40,75,.14),
+    0 0 0 5px rgba(255,108,10,.06);
+}
+
+.search-icon{
+  width:55px;
+
+  font-size:23px;
+
+  color:#738096;
+
+  flex-shrink:0;
+}
+
+.big-search input{
+  width:100%;
+
+  height:100%;
+
+  border:none;
+
+  outline:none;
+
+  background:transparent;
+
+  color:#0b1730;
+
+  font-size:18px;
+
+  padding:
+    0 10px;
+}
+
+.big-search input::placeholder{
+  color:#99a2b0;
+}
+
+.search-button{
+  height:60px;
+
+  padding:
+    0 25px;
+
+  border:none;
+
+  border-radius:17px;
+
+  color:#fff;
+
+  font-size:14px;
+
+  font-weight:900;
+
+  cursor:pointer;
+
+  background:
+    linear-gradient(
+      105deg,
+      #ff6500,
+      #ff8328,
+      #0b315e
+    );
+
+  background-size:220% auto;
+
+  animation:
+    searchButtonFlow 5s linear infinite;
+
+  transition:.3s;
+
+  white-space:nowrap;
+}
+
+@keyframes searchButtonFlow{
+
+  to{
+    background-position:220% center;
+  }
+
+}
+
+.search-button:hover{
+  transform:
+    scale(1.025);
+}
+
+
+/* =========================================================
+   SEARCH RESULTS
+========================================================= */
+
+.results-area{
+  max-width:1300px;
+
+  margin:auto;
+
+  padding:
+    0 5%
+    100px;
+}
+
+.results-head{
+  display:flex;
+
+  justify-content:space-between;
+
+  align-items:end;
+
+  margin-bottom:25px;
+}
+
+.results-head h2{
+  font-size:29px;
+
+  letter-spacing:-1px;
+}
+
+.results-head span{
+  color:#667085;
+
+  font-size:13px;
+}
+
+.product-grid{
+  display:grid;
+
+  grid-template-columns:
+    repeat(
+      auto-fill,
+      minmax(285px,1fr)
+    );
+
+  gap:27px;
+}
+
+.hidden-results{
+  display:none;
+}
+
+
+/* =========================================================
+   PRODUCT CARD
+========================================================= */
+
+.product-card{
+  position:relative;
+
+  overflow:hidden;
+
+  border-radius:25px;
+
+  background:
+    rgba(255,255,255,.91);
+
+  border:
+    1px solid rgba(15,40,75,.09);
+
+  box-shadow:
+    0 15px 55px rgba(15,40,75,.08);
+
+  transition:
+    transform .45s cubic-bezier(.2,.8,.2,1),
+    box-shadow .45s;
+
+  animation:
+    cardAppear .7s both;
+}
+
+.product-card:before{
+  content:"";
+
+  position:absolute;
+
+  inset:-2px;
+
+  z-index:5;
+
+  pointer-events:none;
+
+  border-radius:27px;
+
+  padding:1px;
+
+  background:
+    linear-gradient(
+      110deg,
+      transparent,
+      rgba(255,106,0,.45),
+      transparent,
+      rgba(20,82,145,.42),
+      transparent
+    );
+
+  background-size:
+    300% 300%;
+
+  animation:
+    borderFlow 6s linear infinite;
+
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+
+  mask-composite:
+    exclude;
+}
+
+.product-card:hover{
+  transform:
+    translateY(-9px);
+
+  box-shadow:
+    0 30px 75px rgba(15,40,75,.14);
+}
+
+@keyframes cardAppear{
+
+  from{
+    opacity:0;
+
+    transform:
+      translateY(30px)
+      scale(.97);
+  }
+
+  to{
+    opacity:1;
+
+    transform:none;
+  }
+
+}
+
+@keyframes borderFlow{
+
+  to{
+    background-position:
+      300% 0;
+  }
+
+}
+
+
+/* =========================================================
+   GALLERY
+========================================================= */
+
+.gallery{
+  position:relative;
+
+  aspect-ratio:1/1;
+
+  overflow:hidden;
+
+  background:
+    linear-gradient(
+      135deg,
+      #f4f7fa,
+      #fff
+    );
+
+  touch-action:pan-y;
+}
+
+.gallery-track{
+  height:100%;
+
+  display:flex;
+
+  transition:
+    transform .5s cubic-bezier(.2,.8,.2,1);
+}
+
+.gallery-slide{
+  min-width:100%;
+
+  height:100%;
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:center;
+}
+
+.gallery-slide img{
+  width:100%;
+  height:100%;
+
+  object-fit:contain;
+
+  transition:
+    transform .7s;
+}
+
+.product-card:hover
+.gallery-slide img{
+  transform:
+    scale(1.035);
+}
+
+
+/* IMAGE SHINE */
+
+.gallery:after{
+  content:"";
+
+  position:absolute;
+
+  inset:0;
+
+  pointer-events:none;
+
+  background:
+    linear-gradient(
+      115deg,
+      transparent 20%,
+      rgba(255,255,255,.72) 46%,
+      transparent 67%
+    );
+
+  transform:
+    translateX(-120%);
+
+  animation:
+    imageShine 7s ease-in-out infinite;
+}
+
+@keyframes imageShine{
+
+  0%,55%{
+    transform:
+      translateX(-120%);
+  }
+
+  76%,100%{
+    transform:
+      translateX(120%);
+  }
+
+}
+
+
+/* GALLERY BUTTONS */
+
+.gallery-arrow{
+  position:absolute;
+
+  z-index:8;
+
+  top:50%;
+
+  transform:
+    translateY(-50%);
+
+  width:40px;
+  height:40px;
+
+  border:none;
+
+  border-radius:50%;
+
+  background:
+    rgba(255,255,255,.9);
+
+  box-shadow:
+    0 8px 25px rgba(0,0,0,.12);
+
+  color:#0b1730;
+
+  font-size:25px;
+
+  cursor:pointer;
+
+  transition:.3s;
+}
+
+.gallery-arrow:hover{
+  transform:
+    translateY(-50%)
+    scale(1.13);
+}
+
+.gallery-left{
+  left:12px;
+}
+
+.gallery-right{
+  right:12px;
+}
+
+.gallery-dots{
+  position:absolute;
+
+  z-index:8;
+
+  bottom:13px;
+
+  left:50%;
+
+  transform:
+    translateX(-50%);
+
+  display:flex;
+
+  gap:6px;
+
+  padding:
+    6px 9px;
+
+  border-radius:99px;
+
+  background:
+    rgba(255,255,255,.75);
+
+  backdrop-filter:
+    blur(8px);
+}
+
+.gallery-dot{
+  width:6px;
+  height:6px;
+
+  border-radius:50%;
+
+  background:#aeb6c2;
+
+  transition:.3s;
+}
+
+.gallery-dot.active{
+  background:#0b315d;
+
+  transform:
+    scale(1.4);
+}
+
+.gallery-counter{
+  position:absolute;
+
+  z-index:8;
+
+  top:12px;
+  right:12px;
+
+  color:#fff;
+
+  background:
+    rgba(11,23,48,.75);
+
+  border-radius:99px;
+
+  padding:
+    6px 9px;
+
+  font-size:11px;
+}
+
+
+/* =========================================================
+   PRODUCT CONTENT
+========================================================= */
+
+.product-content{
+  padding:21px;
+}
+
+.category-tag{
+  display:inline-block;
+
+  padding:
+    7px 10px;
+
+  margin-bottom:10px;
+
+  border-radius:99px;
+
+  background:#fff0e5;
+
+  color:#e96810;
+
+  font-size:10px;
+
+  font-weight:900;
+
+  text-transform:uppercase;
+
+  letter-spacing:.8px;
+}
+
+.product-title{
+  font-size:21px;
+
+  line-height:1.25;
+
+  color:#0b1730;
+
+  margin-bottom:12px;
+}
+
+.product-description{
+  color:#667085;
+
+  font-size:14.5px;
+
+  line-height:1.75;
+
+  white-space:pre-wrap;
+
+  word-break:break-word;
+
+  margin-bottom:17px;
+}
+
+.product-video{
+  margin-top:15px;
+
+  overflow:hidden;
+
+  border-radius:15px;
+
+  background:#000;
+}
+
+.product-video video{
+  width:100%;
+
+  display:block;
+}
+
+.buy-button{
+  position:relative;
+
+  overflow:hidden;
+
+  display:block;
+
+  width:100%;
+
+  padding:
+    15px 18px;
+
+  border-radius:14px;
+
+  text-align:center;
+
+  text-decoration:none;
+
+  color:#fff;
+
+  font-size:13px;
+
+  font-weight:900;
+
+  letter-spacing:.4px;
+
+  background:
+    linear-gradient(
+      105deg,
+      #ff6500,
+      #ff8126 35%,
+      #0b315d 72%,
+      #165f9f
+    );
+
+  background-size:
+    220% 100%;
+
+  animation:
+    buyFlow 5s linear infinite;
+
+  box-shadow:
+    0 10px 28px rgba(15,49,88,.16);
+
+  transition:.3s;
+}
+
+.buy-button:hover{
+  transform:
+    translateY(-2px);
+}
+
+.buy-button:after{
+  content:"";
+
+  position:absolute;
+
+  inset:0;
+
+  background:
+    linear-gradient(
+      100deg,
+      transparent,
+      rgba(255,255,255,.4),
+      transparent
+    );
+
+  transform:
+    translateX(-120%);
+
+  animation:
+    buttonShine 4s infinite;
+}
+
+@keyframes buyFlow{
+
+  to{
+    background-position:
+      220% 0;
+  }
+
+}
+
+@keyframes buttonShine{
+
+  0%,55%{
+    transform:
+      translateX(-120%);
+  }
+
+  75%,100%{
+    transform:
+      translateX(120%);
+  }
+
+}
+
+
+/* =========================================================
+   EMPTY / SEARCH MESSAGE
+========================================================= */
+
+.search-message{
+  max-width:700px;
+
+  margin:
+    25px auto 0;
+
+  padding:
+    22px;
+
+  text-align:center;
+
+  color:#667085;
+
+  border-radius:18px;
+
+  background:
+    rgba(255,255,255,.72);
+
+  border:
+    1px solid rgba(15,40,75,.07);
+
+  animation:
+    fadeUp .5s both;
+}
+
+.no-results{
+  grid-column:1/-1;
+
+  text-align:center;
+
+  padding:
+    70px 20px;
+
+  color:#667085;
+
+  background:
+    rgba(255,255,255,.7);
+
+  border-radius:22px;
+
+  border:
+    1px solid rgba(15,40,75,.07);
+}
+
+
+/* =========================================================
+   INTERNAL PAGE HERO
+========================================================= */
+
+.inner-page{
+  max-width:1200px;
+
+  margin:auto;
+
+  padding:
+    75px 5%
+    110px;
+}
+
+.inner-label{
+  color:#ff6b0a;
+
+  font-size:11px;
+
+  font-weight:900;
+
+  text-transform:uppercase;
+
+  letter-spacing:2px;
+
+  margin-bottom:12px;
+}
+
+.inner-title{
+  font-size:
+    clamp(40px,7vw,70px);
+
+  line-height:1;
+
+  letter-spacing:-3px;
+
+  font-weight:950;
+
+  background:
+    linear-gradient(
+      105deg,
+      #ff6500,
+      #ff8a30,
+      #0b315d,
+      #1765a8
+    );
+
+  background-size:
+    240% auto;
+
+  -webkit-background-clip:text;
+
+  background-clip:text;
+
+  color:transparent;
+
+  animation:
+    heroGradient 7s linear infinite;
+}
+
+.inner-subtitle{
+  max-width:680px;
+
+  margin-top:20px;
+
+  color:#667085;
+
+  font-size:16px;
+
+  line-height:1.8;
+}
+
+
+/* =========================================================
+   ABOUT
+========================================================= */
+
+.about-grid{
+  display:grid;
+
+  grid-template-columns:
+    1.1fr .9fr;
+
+  gap:30px;
+
+  margin-top:45px;
+}
+
+.about-card{
+  position:relative;
+
+  padding:34px;
+
+  border-radius:25px;
+
+  background:
+    rgba(255,255,255,.82);
+
+  border:
+    1px solid rgba(15,40,75,.08);
+
+  box-shadow:
+    0 18px 55px rgba(15,40,75,.07);
+
+  overflow:hidden;
+
+  animation:
+    cardAppear .8s both;
+}
+
+.about-card:before{
+  content:"";
+
+  position:absolute;
+
+  width:170px;
+  height:170px;
+
+  right:-90px;
+  top:-90px;
+
+  border-radius:50%;
+
+  background:
+    rgba(255,106,0,.1);
+
+  animation:
+    aboutOrb 8s ease-in-out infinite alternate;
+}
+
+@keyframes aboutOrb{
+
+  to{
+    transform:
+      translate(-80px,80px)
+      scale(1.4);
+  }
+
+}
+
+.about-card h3{
+  font-size:25px;
+
+  margin-bottom:15px;
+
+  letter-spacing:-.7px;
+}
+
+.about-card p{
+  color:#667085;
+
+  font-size:15px;
+
+  line-height:1.85;
+}
+
+.about-card strong{
+  color:#0b315d;
+}
+
+
+/* =========================================================
+   CATEGORIES
+========================================================= */
+
+.category-search{
+  margin-top:40px;
+
+  max-width:750px;
+}
+
+.category-search-box{
+  height:62px;
+
+  display:flex;
+
+  align-items:center;
+
+  padding:
+    6px 8px;
+
+  background:
+    rgba(255,255,255,.82);
+
+  border:
+    1px solid rgba(15,40,75,.09);
+
+  border-radius:18px;
+
+  box-shadow:
+    0 15px 45px rgba(15,40,75,.07);
+
+  backdrop-filter:
+    blur(15px);
+}
+
+.category-search-box span{
+  width:48px;
+
+  text-align:center;
+
+  color:#7d8795;
+
+  font-size:20px;
+}
+
+.category-search-box input{
+  flex:1;
+
+  height:100%;
+
+  border:none;
+
+  outline:none;
+
+  background:transparent;
+
+  font-size:15px;
+
+  color:#0b1730;
+}
+
+.category-grid{
+  display:grid;
+
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(170px,1fr)
+    );
+
+  gap:15px;
+
+  margin-top:35px;
+}
+
+.category-card{
+  position:relative;
+
+  min-height:130px;
+
+  padding:22px;
+
+  border:none;
+
+  border-radius:21px;
+
+  background:
+    rgba(255,255,255,.82);
+
+  border:
+    1px solid rgba(15,40,75,.08);
+
+  box-shadow:
+    0 12px 38px rgba(15,40,75,.06);
+
+  text-align:left;
+
+  cursor:pointer;
+
+  overflow:hidden;
+
+  transition:.4s;
+
+  animation:
+    cardAppear .7s both;
+}
+
+.category-card:hover{
+  transform:
+    translateY(-7px)
+    scale(1.015);
+
+  box-shadow:
+    0 22px 50px rgba(15,40,75,.11);
+}
+
+.category-card:after{
+  content:"";
+
+  position:absolute;
+
+  width:100px;
+  height:100px;
+
+  border-radius:50%;
+
+  right:-45px;
+  bottom:-50px;
+
+  background:
+    rgba(255,106,0,.09);
+
+  transition:.4s;
+}
+
+.category-card:hover:after{
+  transform:
+    scale(1.8);
+}
+
+.category-icon{
+  font-size:27px;
+
+  margin-bottom:15px;
+}
+
+.category-card h3{
+  font-size:16px;
+
+  color:#0b1730;
+}
+
+.category-card p{
+  margin-top:5px;
+
+  color:#8a93a1;
+
+  font-size:11px;
+}
+
+.category-results{
+  margin-top:65px;
+}
+
+.category-results.hidden{
+  display:none;
+}
+
+
+/* =========================================================
+   CONTACT
+========================================================= */
+
+.contact-grid{
+  display:grid;
+
+  grid-template-columns:
+    .8fr 1.2fr;
+
+  gap:30px;
+
+  margin-top:45px;
+}
+
+.contact-info{
+  padding:34px;
+
+  border-radius:25px;
+
+  background:
+    linear-gradient(
+      145deg,
+      #0a2c55,
+      #123f70
+    );
+
+  color:#fff;
+
+  box-shadow:
+    0 20px 60px rgba(10,44,85,.18);
+
+  overflow:hidden;
+
+  position:relative;
+}
+
+.contact-info:before{
+  content:"";
+
+  position:absolute;
+
+  width:260px;
+  height:260px;
+
+  right:-130px;
+  bottom:-130px;
+
+  border-radius:50%;
+
+  border:
+    1px solid rgba(255,255,255,.2);
+
+  animation:
+    contactRing 7s linear infinite;
+}
+
+.contact-info:after{
+  content:"";
+
+  position:absolute;
+
+  width:170px;
+  height:170px;
+
+  right:-85px;
+  bottom:-85px;
+
+  border-radius:50%;
+
+  border:
+    1px solid rgba(255,255,255,.14);
+
+  animation:
+    contactRing 5s linear infinite reverse;
+}
+
+@keyframes contactRing{
+
+  to{
+    transform:
+      rotate(360deg);
+  }
+
+}
+
+.contact-info h3{
+  font-size:28px;
+
+  margin-bottom:15px;
+
+  position:relative;
+  z-index:2;
+}
+
+.contact-info p{
+  color:
+    rgba(255,255,255,.72);
+
+  line-height:1.8;
+
+  font-size:14px;
+
+  position:relative;
+  z-index:2;
+}
+
+.contact-details{
+  margin-top:30px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  gap:13px;
+
+  position:relative;
+  z-index:2;
+}
+
+.contact-details a{
+  color:#fff;
+
+  text-decoration:none;
+
+  padding:
+    13px 15px;
+
+  border-radius:13px;
+
+  background:
+    rgba(255,255,255,.08);
+
+  transition:.3s;
+}
+
+.contact-details a:hover{
+  background:
+    rgba(255,255,255,.15);
+
+  transform:
+    translateX(4px);
+}
+
+.contact-form{
+  padding:34px;
+
+  border-radius:25px;
+
+  background:
+    rgba(255,255,255,.84);
+
+  border:
+    1px solid rgba(15,40,75,.08);
+
+  box-shadow:
+    0 18px 55px rgba(15,40,75,.07);
+}
+
+.contact-form h3{
+  font-size:25px;
+
+  margin-bottom:22px;
+}
+
+.form-group{
+  margin-bottom:17px;
+}
+
+.form-group label{
+  display:block;
+
+  font-size:12px;
+
+  font-weight:800;
+
+  color:#4e5969;
+
+  margin-bottom:7px;
+}
+
+.form-group input,
+.form-group textarea{
+  width:100%;
+
+  border:
+    1px solid #e3e7ed;
+
+  border-radius:13px;
+
+  background:
+    rgba(255,255,255,.8);
+
+  outline:none;
+
+  padding:
+    13px 14px;
+
+  font-family:inherit;
+
+  font-size:14px;
+
+  color:#0b1730;
+
+  transition:.3s;
+}
+
+.form-group input{
+  height:48px;
+}
+
+.form-group textarea{
+  min-height:140px;
+
+  resize:vertical;
+}
+
+.form-group input:focus,
+.form-group textarea:focus{
+  border-color:#ff7117;
+
+  box-shadow:
+    0 0 0 4px rgba(255,113,23,.06);
+}
+
+.send-button{
+  width:100%;
+
+  height:52px;
+
+  border:none;
+
+  border-radius:14px;
+
+  color:#fff;
+
+  font-weight:900;
+
+  cursor:pointer;
+
+  background:
+    linear-gradient(
+      105deg,
+      #ff6500,
+      #ff832b,
+      #0b315d
+    );
+
+  background-size:220% auto;
+
+  animation:
+    searchButtonFlow 5s linear infinite;
+
+  transition:.3s;
+}
+
+.send-button:hover{
+  transform:
+    translateY(-2px);
+}
+
+.form-note{
+  margin-top:12px;
+
+  color:#98a1af;
+
+  font-size:11px;
+
+  line-height:1.5;
+}
+
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+footer{
+  position:relative;
+
+  padding:
+    42px 5%
+    48px;
+
+  text-align:center;
+
+  color:#7b8491;
+
+  border-top:
+    1px solid rgba(15,40,75,.08);
+
+  background:
+    rgba(249,250,252,.72);
+
+  backdrop-filter:
+    blur(12px);
+}
+
+.footer-brand{
+  font-weight:850;
+
+  color:#0b1730;
+
+  margin-bottom:7px;
+}
+
+.footer-secret{
+  display:inline-block;
+
+  margin-top:10px;
+
+  color:#7b8491;
+
+  font-size:12px;
+
+  cursor:pointer;
+
+  text-decoration:none;
+
+  transition:.25s;
+}
+
+.footer-secret:hover{
+  color:#68717e;
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media(max-width:800px){
+
+  .nav{
+    min-height:68px;
+  }
+
+  .logo{
+    width:82px;
+    height:48px;
+  }
+
+  .brand{
+    gap:7px;
+  }
+
+  .brand-name{
+    font-size:16px;
+  }
+
+  .home{
+    padding:
+      65px 5%
+      90px;
+  }
+
+  .home h1{
+    letter-spacing:-2.5px;
+  }
+
+  .big-search-box{
+    height:auto;
+
+    min-height:72px;
+
+    padding:7px;
+
+    flex-wrap:wrap;
+  }
+
+  .search-icon{
+    width:43px;
+  }
+
+  .big-search input{
+    min-width:0;
+
+    font-size:15px;
+  }
+
+  .search-button{
+    width:100%;
+
+    height:52px;
+
+    margin-top:6px;
+  }
+
+  .product-grid{
+    grid-template-columns:1fr;
+  }
+
+  .about-grid,
+  .contact-grid{
+    grid-template-columns:1fr;
+  }
+
+  .inner-page{
+    padding:
+      55px 5%
+      80px;
+  }
+
+  .inner-title{
+    letter-spacing:-2px;
+  }
+
+  .category-grid{
+    grid-template-columns:
+      repeat(2,1fr);
+  }
+
+  .results-head{
+    flex-direction:column;
+
+    align-items:flex-start;
+
+    gap:6px;
+  }
+
+}
+
+@media(max-width:450px){
+
+  .category-grid{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .category-card{
+    min-height:115px;
+
+    padding:17px;
+  }
+
+  .category-icon{
+    font-size:23px;
+  }
+
+}
+
+
+/* =========================================================
+   REDUCED MOTION
+========================================================= */
+
+@media(prefers-reduced-motion:reduce){
+
+  *,
+  *:before,
+  *:after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+
+    transition-duration:.001ms!important;
+
+    scroll-behavior:auto!important;
+  }
+
+}
+
+</style>
+</head>
+
+
+<body>
+
+
+<!-- =======================================================
+     ANIMATED BACKGROUND
+======================================================= -->
+
+<div class="background">
+
+  <div class="orb one"></div>
+  <div class="orb two"></div>
+  <div class="orb three"></div>
+
+  <div class="light-lines">
+    <span></span>
+    <span></span>
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <div class="particles">
+
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+    <i class="particle"></i>
+
+  </div>
+
+</div>
+
+
+<!-- =======================================================
+     HEADER
+======================================================= -->
+
+<header>
+
+  <div class="nav">
+
+    <a
+      class="brand"
+      href="#"
+      onclick="showPage('home');return false;"
+    >
+
+      <img
+        class="logo"
+        src="2E7A6582-42BB-48D4-84D8-71C3DA3ED841.jpeg"
+        alt="Shopper's Suggestions"
+      >
+
+      <span class="brand-name">
+        Shopper's Suggestions
+      </span>
+
+    </a>
+
+
+    <button
+      class="menu-button"
+      id="menuButton"
+      onclick="toggleMenu()"
+      aria-label="Open menu"
+    >
+
+      <div class="menu-icon">
+
+        <span></span>
+        <span></span>
+        <span></span>
+
+      </div>
+
+    </button>
+
+  </div>
+
+</header>
+
+
+<!-- =======================================================
+     MENU
+======================================================= -->
+
+<div
+  class="menu-overlay"
+  id="menuOverlay"
+  onclick="closeMenu()"
+></div>
+
+
+<aside
+  class="side-menu"
+  id="sideMenu"
+>
+
+  <div class="menu-title">
+
+    <small>
+      Explore
+    </small>
+
+    <h2>
+      Shopper's Suggestions
+    </h2>
+
+  </div>
+
+
+  <div class="menu-links">
+
+    <button
+      class="menu-link"
+      onclick="navigate('home')"
+    >
+
+      <span>
+        Home
+      </span>
+
+      <span>
+        →
+      </span>
+
+    </button>
+
+
+    <button
+      class="menu-link"
+      onclick="navigate('categories')"
+    >
+
+      <span>
+        Categories
+      </span>
+
+      <span>
+        →
+      </span>
+
+    </button>
+
+
+    <button
+      class="menu-link"
+      onclick="navigate('about')"
+    >
+
+      <span>
+        About
+      </span>
+
+      <span>
+        →
+      </span>
+
+    </button>
+
+
+    <button
+      class="menu-link"
+      onclick="navigate('contact')"
+    >
+
+      <span>
+        Contact
+      </span>
+
+      <span>
+        →
+      </span>
+
+    </button>
+
+  </div>
+
+</aside>
+
+
+<!-- =======================================================
+     HOME
+======================================================= -->
+
+<section
+  class="page active"
+  id="page-home"
+>
+
+  <div class="home">
+
+    <div class="home-badge">
+
+      <span class="badge-dot"></span>
+
+      Discover something useful
+
+    </div>
+
+
+    <h1>
+      Find something
+      worth buying.
+    </h1>
+
+
+    <p class="home-description">
+
+      Search for products and discover suggestions
+      selected to solve real everyday problems.
+
+    </p>
+
+
+    <!-- BIG HOME SEARCH -->
+
+    <div class="big-search">
+
+      <div class="big-search-box">
+
+        <div class="search-icon">
+          ⌕
+        </div>
+
+        <input
+          id="homeSearch"
+          type="search"
+          placeholder="What are you looking for?"
+          autocomplete="off"
+          onkeydown="homeSearchKey(event)"
+        >
+
+        <button
+          class="search-button"
+          onclick="performHomeSearch()"
+        >
+          SEARCH
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- SEARCH RESULTS -->
+
+  <div
+    class="results-area hidden-results"
+    id="homeResults"
+  >
+
+    <div class="results-head">
+
+      <h2>
+        Suggestions
+      </h2>
+
+      <span id="homeResultCount"></span>
+
+    </div>
+
+
+    <div
+      class="product-grid"
+      id="homeProductGrid"
+    ></div>
+
+  </div>
+
+</section>
+
+
+<!-- =======================================================
+     CATEGORIES
+======================================================= -->
+
+<section
+  class="page"
+  id="page-categories"
+>
+
+  <div class="inner-page">
+
+    <div class="inner-label">
+      Browse
+    </div>
+
+    <h1 class="inner-title">
+      Categories
+    </h1>
+
+    <p class="inner-subtitle">
+
+      Looking for something specific?
+      Choose a category or search directly
+      inside our collection.
+
+    </p>
+
+
+    <!-- CATEGORY SEARCH -->
+
+    <div class="category-search">
+
+      <div class="category-search-box">
+
+        <span>
+          ⌕
+        </span>
+
+        <input
+          id="categorySearch"
+          type="search"
+          placeholder="Search within categories..."
+          oninput="categorySearch()"
+        >
+
+      </div>
+
+    </div>
+
+
+    <!-- CATEGORY CARDS -->
+
+    <div
+      class="category-grid"
+      id="categoryGrid"
+    ></div>
+
+
+    <!-- CATEGORY PRODUCTS -->
+
+    <div
+      class="category-results hidden"
+      id="categoryResults"
+    >
+
+      <div class="results-head">
+
+        <h2 id="categoryResultTitle">
+          Category
+        </h2>
+
+        <span id="categoryResultCount"></span>
+
+      </div>
+
+
+      <div
+        class="product-grid"
+        id="categoryProductGrid"
+      ></div>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =======================================================
+     ABOUT
+======================================================= -->
+
+<section
+  class="page"
+  id="page-about"
+>
+
+  <div class="inner-page">
+
+    <div class="inner-label">
+      Our idea
+    </div>
+
+    <h1 class="inner-title">
+      About Shopper's Suggestions
+    </h1>
+
+    <p class="inner-subtitle">
+
+      A place built around one simple idea:
+      finding useful products should be easier.
+
+    </p>
+
+
+    <div class="about-grid">
+
+
+      <div class="about-card">
+
+        <h3>
+          Why we exist
+        </h3>
+
+        <p>
+
+          Shopping online can mean scrolling through
+          thousands of products before finding something
+          that actually solves the problem you have.
+
+          <br><br>
+
+          Shopper's Suggestions is designed to make that
+          discovery process simpler by bringing useful
+          products and ideas together in one place.
+
+        </p>
+
+      </div>
+
+
+      <div class="about-card">
+
+        <h3>
+          What you'll find
+        </h3>
+
+        <p>
+
+          From technology and accessories to home,
+          travel, creator tools, automotive products
+          and more.
+
+          <br><br>
+
+          Our goal is to highlight products because
+          they are <strong>useful</strong>, not simply
+          because they exist.
+
+        </p>
+
+      </div>
+
+
+      <div class="about-card">
+
+        <h3>
+          Built for discovery
+        </h3>
+
+        <p>
+
+          Search for a product, explore categories,
+          compare suggestions and follow the links
+          to learn more or purchase from the retailer.
+
+        </p>
+
+      </div>
+
+
+      <div class="about-card">
+
+        <h3>
+          The bigger idea
+        </h3>
+
+        <p>
+
+          We want shopping suggestions to feel less
+          like endless advertising and more like finding
+          something that genuinely makes your life
+          easier.
+
+        </p>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =======================================================
+     CONTACT
+======================================================= -->
+
+<section
+  class="page"
+  id="page-contact"
+>
+
+  <div class="inner-page">
+
+    <div class="inner-label">
+      Get in touch
+    </div>
+
+    <h1 class="inner-title">
+      Contact us
+    </h1>
+
+    <p class="inner-subtitle">
+
+      Have a suggestion, question or something you'd
+      like to share? Send us a message.
+
+    </p>
+
+
+    <div class="contact-grid">
+
+
+      <!-- CONTACT INFORMATION -->
+
+      <div class="contact-info">
+
+        <h3>
+          Let's talk.
+        </h3>
+
+        <p>
+
+          You can also reach Shopper's Suggestions
+          through our social channels.
+
+        </p>
+
+
+        <div class="contact-details">
+
+          <a
+            href="https://instagram.com/_shopper.s.suggestions"
+            target="_blank"
+            rel="noopener"
+          >
+            Instagram
+            <br>
+            @_shopper.s.suggestions
+          </a>
+
+
+          <a
+            href="https://wa.me/918606349917"
+            target="_blank"
+            rel="noopener"
+          >
+            WhatsApp
+            <br>
+            +91 8606349917
+          </a>
+
+        </div>
+
+      </div>
+
+
+      <!-- CONTACT FORM -->
+
+      <form
+        class="contact-form"
+        onsubmit="submitContact(event)"
+      >
+
+        <h3>
+          Send a message
+        </h3>
+
+
+        <div class="form-group">
+
+          <label>
+            Your name
+          </label>
+
+          <input
+            id="contactName"
+            type="text"
+            placeholder="Your name"
+            required
+          >
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label>
+            Your email
+          </label>
+
+          <input
+            id="contactEmail"
+            type="email"
+            placeholder="you@example.com"
+            required
+          >
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label>
+            Message
+          </label>
+
+          <textarea
+            id="contactMessage"
+            placeholder="Write your message..."
+            required
+          ></textarea>
+
+        </div>
+
+
+        <button
+          class="send-button"
+          type="submit"
+        >
+          SEND MESSAGE
+        </button>
+
+
+        <p class="form-note">
+
+          The email-sending connection will be connected
+          to the site's Gmail system later.
+
+        </p>
+
+      </form>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =======================================================
+     FOOTER
+======================================================= -->
+
+<footer>
+
+  <div class="footer-brand">
+    Shopper's Suggestions
+  </div>
+
+  <div>
+    © 2026 Shopper's Suggestions. All rights reserved.
+  </div>
+
+
+  <!--
+    SECRET UPLOADER ACCESS
+    Looks like normal footer text.
+  -->
+
+  <a
+    class="footer-secret"
+    href="/upload.html"
+  >
+    created for a better shopping
+  </a>
+
+</footer>
+
+
+<script>
+
+/* =========================================================
+   GLOBAL DATA
+========================================================= */
+
+let allProducts = [];
+
+let currentCategory = "";
+
+
+/* =========================================================
+   PAGE NAVIGATION
+========================================================= */
+
+function showPage(page){
+
+  document
+    .querySelectorAll(".page")
+    .forEach(section => {
+
+      section.classList.remove("active");
+
+    });
+
+
+  const target =
+    document.getElementById(
+      "page-" + page
+    );
+
+
+  if(target){
+
+    target.classList.add("active");
+
+  }
+
+
+  window.scrollTo({
+    top:0,
+    behavior:"smooth"
+  });
+
+}
+
+
+/* =========================================================
+   MENU
+========================================================= */
+
+function toggleMenu(){
+
+  const menu =
+    document.getElementById(
+      "sideMenu"
+    );
+
+  const overlay =
+    document.getElementById(
+      "menuOverlay"
+    );
+
+  const button =
+    document.getElementById(
+      "menuButton"
+    );
+
+
+  menu.classList.toggle("show");
+
+  overlay.classList.toggle("show");
+
+  button.classList.toggle("open");
+
+}
+
+
+function closeMenu(){
+
+  document
+    .getElementById("sideMenu")
+    .classList.remove("show");
+
+  document
+    .getElementById("menuOverlay")
+    .classList.remove("show");
+
+  document
+    .getElementById("menuButton")
+    .classList.remove("open");
+
+}
+
+
+function navigate(page){
+
+  closeMenu();
+
+  setTimeout(
+    () => showPage(page),
+    120
+  );
+
+}
+
+
+/* =========================================================
+   HOME SEARCH
+========================================================= */
+
+function homeSearchKey(event){
+
+  if(event.key === "Enter"){
+
+    performHomeSearch();
+
+  }
+
+}
+
+
+function performHomeSearch(){
+
+  const input =
+    document.getElementById(
+      "homeSearch"
+    );
+
+  const query =
+    input.value
+      .trim()
+      .toLowerCase();
+
+
+  const results =
+    document.getElementById(
+      "homeResults"
+    );
+
+
+  if(!query){
+
+    results.classList.add(
+      "hidden-results"
+    );
+
+    return;
+
+  }
+
+
+  const matches =
+    searchProducts(
+      query
+    );
+
+
+  results.classList.remove(
+    "hidden-results"
+  );
+
+
+  document.getElementById(
+    "homeResultCount"
+  ).textContent =
+    matches.length +
+    (
+      matches.length === 1
+        ? " result"
+        : " results"
+    );
+
+
+  renderProducts(
+    matches,
+    "homeProductGrid"
+  );
+
+
+  setTimeout(
+    () => {
+
+      results.scrollIntoView({
+        behavior:"smooth",
+        block:"start"
+      });
+
+    },
+    50
+  );
+
+}
+
+
+/* =========================================================
+   PRODUCT SEARCH
+========================================================= */
+
+function searchProducts(query){
+
+  return allProducts.filter(
+    product => {
+
+      const title =
+        String(
+          product.title || ""
+        ).toLowerCase();
+
+
+      const description =
+        String(
+          product.description || ""
+        ).toLowerCase();
+
+
+      const category =
+        String(
+          product.category || ""
+        ).toLowerCase();
+
+
+      return (
+        title.includes(query) ||
+        description.includes(query) ||
+        category.includes(query)
+      );
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   LOAD PRODUCTS
+========================================================= */
+
+async function loadProducts(){
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/products"
+      );
+
+
+    if(!response.ok){
+
+      throw new Error(
+        "Product API failed"
+      );
+
+    }
+
+
+    const data =
+      await response.json();
+
+
+    allProducts =
+      Array.isArray(data)
+        ? data
+        : (
+            data.products || []
+          );
+
+
+    buildCategories();
+
+
+  }catch(error){
+
+    console.error(
+      "Product loading error:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   BUILD CATEGORIES
+========================================================= */
+
+const categoryList = [
+
+  ["💻","Tech"],
+  ["🏠","Home"],
+  ["👕","Fashion"],
+  ["✨","Beauty"],
+  ["🎮","Gaming"],
+  ["⚽","Sports"],
+  ["✈️","Travel"],
+  ["🍳","Kitchen"],
+  ["📚","Office"],
+  ["🚗","Automotive"],
+  ["📱","Electronics"],
+  ["🧸","Kids"],
+  ["🐾","Pets"],
+  ["🏃","Fitness"],
+  ["📖","Books"],
+  ["🎒","Accessories"],
+  ["📷","Photography"],
+  ["🎥","Creator"],
+  ["📦","Other"]
+
+];
+
+
+function buildCategories(){
+
+  const grid =
+    document.getElementById(
+      "categoryGrid"
+    );
+
+
+  grid.innerHTML =
+    categoryList.map(
+      (category,index) => {
+
+        const icon =
+          category[0];
+
+        const name =
+          category[1];
+
+
+        const count =
+          allProducts.filter(
+            product =>
+              String(
+                product.category || ""
+              ).toLowerCase()
+              ===
+              name.toLowerCase()
+          ).length;
+
+
+        return `
+
+          <button
+            class="category-card"
+            style="
+              animation-delay:
+              ${index * 45}ms
+            "
+            onclick="
+              openCategory(
+                '${escapeJS(name)}'
+              )
+            "
+          >
+
+            <div class="category-icon">
+              ${icon}
+            </div>
+
+            <h3>
+              ${escapeHTML(name)}
+            </h3>
+
+            <p>
+              ${count}
+              ${
+                count === 1
+                  ? "product"
+                  : "products"
+              }
+            </p>
+
+          </button>
+
+        `;
+
+      }
+    ).join("");
+
+}
+
+
+/* =========================================================
+   CATEGORY SEARCH
+========================================================= */
+
+function categorySearch(){
+
+  const input =
+    document.getElementById(
+      "categorySearch"
+    );
+
+
+  const query =
+    input.value
+      .trim()
+      .toLowerCase();
+
+
+  if(!query){
+
+    document
+      .getElementById(
+        "categoryResults"
+      )
+      .classList.add("hidden");
+
+    return;
+
+  }
+
+
+  const results =
+    allProducts.filter(
+      product => {
+
+        const title =
+          String(
+            product.title || ""
+          ).toLowerCase();
+
+
+        const description =
+          String(
+            product.description || ""
+          ).toLowerCase();
+
+
+        const category =
+          String(
+            product.category || ""
+          ).toLowerCase();
+
+
+        return (
+          title.includes(query) ||
+          description.includes(query) ||
+          category.includes(query)
+        );
+
+      }
+    );
+
+
+  showCategoryResults(
+    "Search results",
+    results
+  );
+
+}
+
+
+/* =========================================================
+   OPEN CATEGORY
+========================================================= */
+
+function openCategory(category){
+
+  currentCategory =
+    category;
+
+
+  const results =
+    allProducts.filter(
+      product =>
+        String(
+          product.category || ""
+        ).toLowerCase()
+        ===
+        category.toLowerCase()
+    );
+
+
+  showCategoryResults(
+    category,
+    results
+  );
+
+}
+
+
+function showCategoryResults(
+  title,
+  products
+){
+
+  const section =
+    document.getElementById(
+      "categoryResults"
+    );
+
+
+  section.classList.remove(
+    "hidden"
+  );
+
+
+  document.getElementById(
+    "categoryResultTitle"
+  ).textContent =
+    title;
+
+
+  document.getElementById(
+    "categoryResultCount"
+  ).textContent =
+    products.length +
+    (
+      products.length === 1
+        ? " product"
+        : " products"
+    );
+
+
+  renderProducts(
+    products,
+    "categoryProductGrid"
+  );
+
+
+  setTimeout(
+    () => {
+
+      section.scrollIntoView({
+        behavior:"smooth",
+        block:"start"
+      });
+
+    },
+    80
+  );
+
+}
+
+
+/* =========================================================
+   RENDER PRODUCTS
+========================================================= */
+
+function renderProducts(
+  products,
+  containerId
+){
+
+  const container =
+    document.getElementById(
+      containerId
+    );
+
+
+  if(!container){
+
+    return;
+
+  }
+
+
+  if(!products.length){
+
+    container.innerHTML = `
+
+      <div class="no-results">
+
+        No matching products found.
+
+        <br><br>
+
+        Try another search.
+
+      </div>
+
+    `;
+
+    return;
+
+  }
+
+
+  container.innerHTML =
+    products.map(
+      (product,index) =>
+        createProductCard(
+          product,
+          index
+        )
+    ).join("");
+
+
+  setupSwipe();
+
+}
+
+
+/* =========================================================
+   PRODUCT CARD
+========================================================= */
+
+function createProductCard(
+  product,
+  index
+){
+
+  let images = [
+
+    product.image1_url,
+    product.image2_url,
+    product.image3_url,
+    product.image4_url,
+    product.image5_url
+
+  ].filter(
+    image =>
+      typeof image === "string" &&
+      image.trim()
+  );
+
+
+  /*
+    ALSO SUPPORT
+    product.images[]
+  */
+
+  if(
+    Array.isArray(
+      product.images
+    )
+  ){
+
+    product.images.forEach(
+      image => {
+
+        if(
+          image &&
+          !images.includes(image)
+        ){
+
+          images.push(image);
+
+        }
+
+      }
+    );
+
+  }
+
+
+  if(!images.length){
+
+    images = [
+
+      "https://via.placeholder.com/800x800?text=No+Image"
+
+    ];
+
+  }
+
+
+  const galleryId =
+    "gallery-" +
+    product.id +
+    "-" +
+    Math.random()
+      .toString(36)
+      .slice(2,8);
+
+
+  const slides =
+    images.map(
+      image => `
+
+        <div class="gallery-slide">
+
+          <img
+            src="${escapeHTML(image)}"
+            alt="${escapeHTML(
+              product.title ||
+              "Product"
+            )}"
+            loading="lazy"
+          >
+
+        </div>
+
+      `
+    ).join("");
+
+
+  const dots =
+    images.map(
+      (_,i) => `
+
+        <span
+          class="
+            gallery-dot
+            ${i === 0 ? "active" : ""}
+          "
+        ></span>
+
+      `
+    ).join("");
+
+
+  const video =
+    product.video_url
+
+      ?
+
+      `
+
+        <div class="product-video">
+
+          <video
+            controls
+            preload="metadata"
+            src="${escapeHTML(
+              product.video_url
+            )}"
+          ></video>
+
+        </div>
+
+      `
+
+      :
+
+      "";
+
+
+  return `
+
+    <article
+      class="product-card"
+      style="
+        animation-delay:
+        ${Math.min(
+          index * 65,
+          600
+        )}ms
+      "
+    >
+
+
+      <div
+        class="gallery"
+        id="${galleryId}"
+        data-index="0"
+        data-count="${images.length}"
+      >
+
+        <div class="gallery-track">
+
+          ${slides}
+
+        </div>
+
+
+        ${
+          images.length > 1
+
+          ?
+
+          `
+
+            <button
+              class="
+                gallery-arrow
+                gallery-left
+              "
+              onclick="
+                changeSlide(
+                  '${galleryId}',
+                  -1
+                )
+              "
+              aria-label="Previous image"
+            >
+              ‹
+            </button>
+
+
+            <button
+              class="
+                gallery-arrow
+                gallery-right
+              "
+              onclick="
+                changeSlide(
+                  '${galleryId}',
+                  1
+                )
+              "
+              aria-label="Next image"
+            >
+              ›
+            </button>
+
+
+            <div class="gallery-dots">
+
+              ${dots}
+
+            </div>
+
+
+            <div class="gallery-counter">
+
+              <span class="gallery-current">
+                1
+              </span>
+
+              /
+              ${images.length}
+
+            </div>
+
+          `
+
+          :
+
+          ""
+
+        }
+
+      </div>
+
+
+      <div class="product-content">
+
+
+        ${
+          product.category
+
+            ?
+
+            `
+
+              <div class="category-tag">
+
+                ${escapeHTML(
+                  product.category
+                )}
+
+              </div>
+
+            `
+
+            :
+
+            ""
+
+        }
+
+
+        <h2 class="product-title">
+
+          ${escapeHTML(
+            product.title || ""
+          )}
+
+        </h2>
+
+
+        <div class="product-description">
+
+          ${escapeHTML(
+            product.description || ""
+          )}
+
+        </div>
+
+
+        ${video}
+
+
+        ${
+          product.affiliate_url
+
+            ?
+
+            `
+
+              <a
+                class="buy-button"
+                href="${escapeHTML(
+                  product.affiliate_url
+                )}"
+                target="_blank"
+                rel="
+                  noopener
+                  noreferrer
+                  sponsored
+                "
+              >
+
+                MAKE IT YOURS!
+
+              </a>
+
+            `
+
+            :
+
+            ""
+
+        }
+
+      </div>
+
+    </article>
+
+  `;
+
+}
+
+
+/* =========================================================
+   IMAGE SLIDER
+========================================================= */
+
+function changeSlide(
+  id,
+  direction
+){
+
+  const gallery =
+    document.getElementById(id);
+
+
+  if(!gallery){
+
+    return;
+
+  }
+
+
+  const track =
+    gallery.querySelector(
+      ".gallery-track"
+    );
+
+
+  const dots =
+    gallery.querySelectorAll(
+      ".gallery-dot"
+    );
+
+
+  const current =
+    gallery.querySelector(
+      ".gallery-current"
+    );
+
+
+  const count =
+    Number(
+      gallery.dataset.count
+    );
+
+
+  let index =
+    Number(
+      gallery.dataset.index
+    ) +
+    direction;
+
+
+  if(index < 0){
+
+    index =
+      count - 1;
+
+  }
+
+
+  if(index >= count){
+
+    index = 0;
+
+  }
+
+
+  gallery.dataset.index =
+    index;
+
+
+  track.style.transform =
+    `translateX(-${index * 100}%)`;
+
+
+  dots.forEach(
+    (dot,i) => {
+
+      dot.classList.toggle(
+        "active",
+        i === index
+      );
+
+    }
+  );
+
+
+  if(current){
+
+    current.textContent =
+      index + 1;
+
+  }
+
+}
+
+
+/* =========================================================
+   SWIPE
+========================================================= */
+
+function setupSwipe(){
+
+  document
+    .querySelectorAll(
+      ".gallery"
+    )
+    .forEach(
+      gallery => {
+
+        let startX = 0;
+        let startY = 0;
+
+
+        gallery.addEventListener(
+          "touchstart",
+          event => {
+
+            startX =
+              event.touches[0]
+                .clientX;
+
+            startY =
+              event.touches[0]
+                .clientY;
+
+          },
+          {
+            passive:true
+          }
+        );
+
+
+        gallery.addEventListener(
+          "touchend",
+          event => {
+
+            const dx =
+              event.changedTouches[0]
+                .clientX -
+              startX;
+
+
+            const dy =
+              event.changedTouches[0]
+                .clientY -
+              startY;
+
+
+            if(
+              Math.abs(dx) > 45 &&
+              Math.abs(dx) >
+                Math.abs(dy)
+            ){
+
+              changeSlide(
+                gallery.id,
+                dx < 0 ? 1 : -1
+              );
+
+            }
+
+          },
+          {
+            passive:true
+          }
+        );
+
+      }
+    );
+
+}
+
+
+/* =========================================================
+   CONTACT FORM
+========================================================= */
+
+function submitContact(event){
+
+  event.preventDefault();
+
+
+  /*
+    GMAIL CONNECTION WILL BE ADDED LATER.
+
+    For now this prevents the browser from
+    navigating away and shows a temporary message.
+  */
+
+  const name =
+    document.getElementById(
+      "contactName"
+    ).value.trim();
+
+
+  const message =
+    document.getElementById(
+      "contactMessage"
+    ).value.trim();
+
+
+  if(!name || !message){
+
+    return;
+
+  }
+
+
+  alert(
+    "Your message is ready. The Gmail sending system will be connected soon."
+  );
+
+}
+
+
+/* =========================================================
+   ESCAPE HTML
+========================================================= */
+
+function escapeHTML(value){
+
+  return String(value)
+
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+
+    .replace(
+      /</g,
+      "&lt;"
+    )
+
+    .replace(
+      />/g,
+      "&gt;"
+    )
+
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+
+}
+
+
+/* =========================================================
+   ESCAPE JAVASCRIPT
+========================================================= */
+
+function escapeJS(value){
+
+  return String(value)
+    .replace(
+      /\\/g,
+      "\\\\"
+    )
+    .replace(
+      /'/g,
+      "\\'"
+    );
+
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+loadProducts();
+
+</script>
+
+</body>
+</html>
