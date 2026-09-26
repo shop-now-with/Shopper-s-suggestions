@@ -17,3 +17,7 @@ TELEGRAM_GROUP_IDS = "-1003414319140"
 [assets]
 directory = "./"
 binding = "ASSETS"
+
+[observability.logs]
+enabled = false
+invocation_logs = true
