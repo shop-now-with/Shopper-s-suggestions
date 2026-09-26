@@ -1,0 +1,14 @@
+name = "shopper-s-suggestions-telegram"
+main = "telegram-worker.js"
+compatibility_date = "2026-09-19"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "product-db"
+database_id = "7fc3ac99-20b3-40f1-a022-1a11a0b4a177"
+
+[vars]
+GITHUB_BRANCH = "main"
+GITHUB_OWNER = "shop-now-with"
+GITHUB_REPO = "Shopper-s-suggestions"
+TELEGRAM_GROUP_IDS = "-1003414319140"
