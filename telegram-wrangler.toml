@@ -13,3 +13,14 @@ GITHUB_OWNER = "shop-now-with"
 GITHUB_REPO = "Shopper-s-suggestions"
 TELEGRAM_GROUP_IDS = "-1003414319140"
 
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = false
+head_sampling_rate = 1
+persist = true
+
