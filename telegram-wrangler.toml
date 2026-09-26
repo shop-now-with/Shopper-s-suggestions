@@ -11,6 +11,7 @@ database_id = "7fc3ac99-20b3-40f1-a022-1a11a0b4a177"
 GITHUB_BRANCH = "main"
 GITHUB_OWNER = "shop-now-with"
 GITHUB_REPO = "Shopper-s-suggestions"
+TELEGRAM_FEEDBACK_CHAT_ID = "8822043643"
 TELEGRAM_GROUP_IDS = "-1003414319140"
 
 [observability.logs]
