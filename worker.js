@@ -278,6 +278,7 @@ async function ensureSchema(env) {
   await executeSchema(env, BASE_SCHEMA);
   await executeSchema(env, USER_SCHEMA);
   await executeSchema(env, COMMUNITY_SCHEMA);
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_api_keys (user_id INTEGER PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, key_prefix TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`).run();
   const rootEmail = clean(env.ROOT_ADMIN_EMAIL || "fayasm379@gmail.com", 320).toLowerCase();
   if (rootEmail.includes("@")) {
     await env.DB.prepare("INSERT OR IGNORE INTO admin_allowlist (email, is_root) VALUES (?, 1)").bind(rootEmail).run();
@@ -703,6 +704,70 @@ async function handleSubscription(request, env) {
   const active = await activePromoterSubscription(env,user.id);
   if (request.method === "GET") return json({ok:true,plan:{price_inr:165,period:"month",image_uploads:!!active,listing_days:active?30:3},subscription:active||null,payment_status:env.PAYMENT_PROVIDER&&env.PAYMENT_API_KEY?"provider_configured_checkout_not_implemented":"setup_required"});
   return json({ok:false,error:"₹165/month subscription checkout is not enabled yet. No payment was taken. Configure a real provider and signed webhook before activating a subscription.",status:"setup_required"},503);
+}
+
+
+async function hashApiKey(key) {
+  const bytes = new TextEncoder().encode(key);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+}
+async function handleMyApiKey(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return json({ ok: false, error: "Sign in required" }, 401);
+  const admin = await adminUser(request, env);
+  const promoter = await approvedPromoter(env, user.id);
+  if (!admin && !promoter) return json({ ok: false, error: "API access is available to approved promoters and administrators" }, 403);
+  if (request.method === "GET") {
+    const row = await env.DB.prepare("SELECT key_prefix, created_at, revoked_at FROM user_api_keys WHERE user_id=? LIMIT 1").bind(user.id).first();
+    return json({ ok: true, key: row || null });
+  }
+  if (request.method === "DELETE") {
+    await env.DB.prepare("UPDATE user_api_keys SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL").bind(user.id).run();
+    return json({ ok: true, revoked: true });
+  }
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  const raw = new Uint8Array(32);
+  crypto.getRandomValues(raw);
+  const token = "ss_live_" + Array.from(raw, b => b.toString(16).padStart(2, "0")).join("");
+  const digest = await hashApiKey(token);
+  const prefix = token.slice(0, 16);
+  await env.DB.prepare("INSERT INTO user_api_keys (user_id,key_hash,key_prefix,created_at,revoked_at) VALUES (?,?,?,CURRENT_TIMESTAMP,NULL) ON CONFLICT(user_id) DO UPDATE SET key_hash=excluded.key_hash,key_prefix=excluded.key_prefix,created_at=CURRENT_TIMESTAMP,revoked_at=NULL").bind(user.id, digest, prefix).run();
+  return json({ ok: true, api_key: token, key_prefix: prefix, warning: "Copy this key now. It will not be shown again." }, 201);
+}
+async function handleIntegrationProduct(request, env) {
+  const authorization = request.headers.get("Authorization") || "";
+  const match = authorization.match(/^Bearer (ss_live_[a-f0-9]{64})$/i);
+  if (!match) return json({ ok: false, error: "A valid API key is required in the Authorization: Bearer header" }, 401);
+  const digest = await hashApiKey(match[1]);
+  const owner = await env.DB.prepare("SELECT u.id,u.email FROM user_api_keys k JOIN users u ON u.id=k.user_id WHERE k.key_hash=? AND k.revoked_at IS NULL AND u.is_banned=0 LIMIT 1").bind(digest).first();
+  if (!owner) return json({ ok: false, error: "Invalid or revoked API key" }, 401);
+  const adminRow = owner.email ? await env.DB.prepare("SELECT email FROM admin_allowlist WHERE email=? LIMIT 1").bind(clean(owner.email,320).toLowerCase()).first() : null;
+  const promoter = await approvedPromoter(env, owner.id);
+  if (!adminRow && !promoter) return json({ ok: false, error: "An approved promoter account is required" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON body" }, 400); }
+  const title = clean(body.title, 300);
+  const description = clean(body.description, 10000);
+  const affiliateUrl = validHttpUrl(clean(body.affiliate_url ?? body.affiliate_link ?? body.product_url, 2000));
+  const category = clean(body.category || "Other", 100);
+  const price = numberOrNull(body.price);
+  const originalPrice = numberOrNull(body.original_price ?? body.originalPrice ?? body.mrp);
+  const videoUrl = validHttpUrl(clean(body.video_url, 2000));
+  if (!title) return json({ ok: false, error: "Title is required" }, 400);
+  if (!validCategory(category)) return json({ ok: false, error: "Invalid category" }, 400);
+  if (!affiliateUrl) return json({ ok: false, error: "A valid http or https affiliate_url is required" }, 400);
+  const images = [];
+  for (let i = 1; i <= 5; i++) {
+    const value = body[`image${i}_url`] ?? (i === 1 ? body.image_url : "");
+    const image = value ? validHttpUrl(clean(value, 3000)) : null;
+    if (value && !image) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
+    images.push(image);
+  }
+  if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
+  const result = await env.DB.prepare(`INSERT INTO products (title,description,affiliate_url,category,image1_url,image2_url,image3_url,image4_url,image5_url,video_url,published,featured,price,original_price,uploader_id,expires_at,listing_duration_hours) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','+72 hours'),72) RETURNING id`).bind(title,description,affiliateUrl,category,...images,videoUrl,1,0,price,originalPrice,owner.id).first();
+  const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=?`).bind(result.id).first();
+  return json({ ok: true, product: productPublic(product) }, 201);
 }
 
 async function handleCreateProduct(request, env) {
@@ -1298,6 +1363,8 @@ export default {
       if (path === "/api/payments/checkout" && request.method === "POST") return handlePaymentSetup(request, env);
       const clickMatch = path.match(/^\/go\/product\/(\d+)$/);
       if (clickMatch && request.method === "GET") return handleTrackClick(request, env, clickMatch[1]);
+      if (path === "/api/my/api-key" && ["GET", "POST", "DELETE"].includes(request.method)) return handleMyApiKey(request, env);
+      if (path === "/api/integrations/products" && request.method === "POST") return handleIntegrationProduct(request, env);
       if (path === "/api/upload-media" && request.method === "POST") return handleUploadMedia(request, env);
       if (path === "/api/delete-media" && request.method === "POST") return handleDeleteMedia(request, env);
       if (path === "/api/products" && request.method === "GET") return handleProducts(request, env);
