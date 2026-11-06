@@ -877,15 +877,15 @@ async function handleUploadMedia(request, env) {
   const user = await currentUser(request,env);
   const promoter = user ? await approvedPromoter(env,user.id) : null;
   if (!admin && !promoter) return json({ok:false,error:"Become a promoter before uploading product media"},403);
-  if (!admin) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
-    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
-  }
   if (!(request.headers.get("Content-Type") || "").startsWith("multipart/form-data")) return json({ ok: false, error: "Expected multipart/form-data" }, 400);
   const form = await request.formData();
   const file = form.get("file") || form.get("image") || form.get("media");
   if (!(file instanceof File)) return json({ ok: false, error: "No file received" }, 400);
   const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(file.name);
+  if (!admin && !isVideo) {
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
+  }
   const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
   if (file.size <= 0) return json({ ok: false, error: "Empty file" }, 400);
   if (file.size > maxSize) return json({ ok: false, error: isVideo ? "Video is too large. Maximum 100 MB." : "Image is too large. Maximum 15 MB." }, 413);
@@ -1336,7 +1336,7 @@ async function handleProductFavorites(request, env, productId) {
 async function handleMyProductFavorites(request, env) {
   const user = await requireUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
-  const result = await env.DB.prepare(`${PRODUCT_SELECT} JOIN product_favorites pf ON pf.product_id=p.id WHERE pf.user_id=? AND p.published=1 AND p.expires_at>CURRENT_TIMESTAMP ORDER BY pf.created_at DESC`).bind(user.id).all();
+  const result = await env.DB.prepare(`${PRODUCT_SELECT} JOIN product_favorites pf ON pf.product_id=p.id WHERE pf.user_id=? AND p.published=1 AND (p.expires_at IS NULL OR p.expires_at>CURRENT_TIMESTAMP) ORDER BY pf.created_at DESC`).bind(user.id).all();
   return json({ ok: true, products: (result.results || []).map(productPublic) });
 }
 async function handlePaymentSetup(request, env) {
