@@ -949,7 +949,7 @@ async function handleGoogleCallback(request, env) {
   await logActivity(env, user.id, "google_sign_in", "user", user.id);
   await env.DB.prepare("INSERT INTO login_notices (user_id,title,body) VALUES (?,?,?)").bind(user.id, "New sign-in", `A Google sign-in to your Shopper’s Suggestions account occurred at ${new Date().toISOString()}. If this was not you, sign out of other sessions and secure your Google account.`).run();
   try { await sendSingleEmail(env, email, "New sign-in to Shopper’s Suggestions", `A Google sign-in to your Shopper’s Suggestions account occurred at ${new Date().toISOString()}. If this was not you, secure your Google account.`); } catch (error) { console.error("Login notification email failed", error); }
-  const headers = new Headers({ Location: isNewUser || !user.username ? "/?onboarding=1" : "/" });
+  const headers = new Headers({ Location: "/profile.html" });
   headers.append("Set-Cookie", userCookie(sessionId, slot));
   headers.append("Set-Cookie", [`ss_active_account=${slot}`, "Secure", "SameSite=Lax", "Path=/", "Max-Age=2592000"].join("; "));
   headers.append("Set-Cookie", clearState);
