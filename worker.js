@@ -817,7 +817,7 @@ async function handleCreateProduct(request, env) {
   const permanent = !!admin && isTrue(body.permanent);
   const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
   const hasUploadedImage = !!mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix));
-  if (hasUploadedImage) {
+  if (!admin && hasUploadedImage) {
     const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
     if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. You can still use direct image links."},409);
   }
