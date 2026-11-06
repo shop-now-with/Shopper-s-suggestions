@@ -660,7 +660,7 @@ async function handleAdminProducts(request, env) {
 }
 async function handleProduct(request, env, id) {
   const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ? LIMIT 1`).bind(id).first();
-  if (!product || ((Number(product.published) !== 1 || !product.expires_at || product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19)) && !(await isAdmin(request, env)))) return json({ ok: false, error: "Product not found" }, 404);
+  if (!product || ((Number(product.published) !== 1 || (product.expires_at && product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19))) && !(await isAdmin(request, env)))) return json({ ok: false, error: "Product not found" }, 404);
   return json({ ok: true, product: productPublic(product) });
 }
 async function activePromoterSubscription(env, userId) {
@@ -1359,7 +1359,7 @@ async function handlePaymentSetup(request, env) {
 async function handleTrackClick(request, env, productId) {
   await cleanupExpiredProducts(env);
   const product = await env.DB.prepare("SELECT id,affiliate_url,published,expires_at FROM products WHERE id=? LIMIT 1").bind(productId).first();
-  if (product && (!product.expires_at || product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19))) return json({ok:false,error:"This listing has expired"},410);
+  if (product && product.expires_at && product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19)) return json({ok:false,error:"This listing has expired"},410);
   /*old query removed*/
 
   if (!product || Number(product.published)!==1 || !validHttpUrl(product.affiliate_url)) return json({ok:false,error:"Product link not available"},404);
@@ -1370,7 +1370,7 @@ async function handleTrackClick(request, env, productId) {
 
 async function handleShareProduct(request, env, id) {
   const product = await env.DB.prepare("SELECT id, published, expires_at FROM products WHERE id = ? LIMIT 1").bind(id).first();
-  if (!product || ((Number(product.published) !== 1 || !product.expires_at || product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19)) && !(await isAdmin(request, env)))) return json({ ok: false, error: "Product not found" }, 404);
+  if (!product || ((Number(product.published) !== 1 || (product.expires_at && product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19))) && !(await isAdmin(request, env)))) return json({ ok: false, error: "Product not found" }, 404);
   return json({ ok: true, url: `https://shopperssuggestions.online/?product=${encodeURIComponent(id)}` });
 }
 async function handleCategories() { return json({ ok: true, categories: CATEGORIES }); }
