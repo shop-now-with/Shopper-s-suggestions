@@ -1071,6 +1071,8 @@ async function handlePromoterApplication(request, env) {
   }
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+  const existingPromoter = await env.DB.prepare("SELECT status FROM promoters WHERE user_id=? LIMIT 1").bind(user.id).first();
+  if (existingPromoter?.status === "rejected") return json({ ok: false, error: "Promoter access was removed by an administrator. Please contact support." }, 403);
   const source = clean(body.affiliate_source, 300);
   const socials = clean(body.social_links, 1500);
   const bio = clean(body.bio, 1000);
@@ -1164,12 +1166,57 @@ async function handleAdminRemove(request, env, emailEncoded) {
 }
 async function handleAdminUsers(request, env) {
   if (!(await requireAdmin(request, env))) return json({ ok: false, error: "Administrator access required" }, 403);
-  const result = await env.DB.prepare(`SELECT u.id, u.email, u.username, u.display_name, u.created_at,
-    CASE WHEN a.email IS NOT NULL THEN 1 ELSE 0 END AS is_admin,
-    CASE WHEN a.email IS NOT NULL THEN 'permanent' ELSE 'free' END AS subscription
-    FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email)
-    ORDER BY u.id DESC LIMIT 500`).all();
+  const result = await env.DB.prepare("SELECT u.id, u.email, u.username, u.display_name, u.created_at, u.is_banned, CASE WHEN a.email IS NOT NULL THEN 1 ELSE 0 END AS is_admin, CASE WHEN a.email IS NOT NULL THEN 'permanent' ELSE 'free' END AS subscription, COALESCE(p.status, 'none') AS promoter_status FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email) LEFT JOIN promoters p ON p.user_id=u.id ORDER BY u.id DESC LIMIT 500").all();
   return json({ ok: true, users: result.results || [] });
+}
+async function handleAdminUserAction(request, env, userId) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ ok: false, error: "Administrator access required" }, 403);
+  const id = Number(userId);
+  if (!Number.isSafeInteger(id) || id < 1) return json({ ok: false, error: "Invalid user ID" }, 400);
+  const target = await env.DB.prepare("SELECT u.id,u.email,u.is_banned,a.email AS admin_email FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email) WHERE u.id=? LIMIT 1").bind(id).first();
+  if (!target) return json({ ok: false, error: "User not found" }, 404);
+  if (Number(target.id) === Number(admin.id)) return json({ ok: false, error: "You cannot change or remove your own account" }, 403);
+  if (target.admin_email) return json({ ok: false, error: "Administrator accounts are protected from user actions" }, 403);
+  if (request.method === "DELETE") {
+    const products = await env.DB.prepare("SELECT * FROM products WHERE uploader_id=?").bind(id).all();
+    for (const product of products.results || []) {
+      try { await deleteExpiredProductMedia(env, product); }
+      catch (error) { console.error("User removal media cleanup failed:", error); }
+    }
+    await env.DB.prepare("DELETE FROM products WHERE uploader_id=?").bind(id).run();
+    await env.DB.prepare("DELETE FROM promoters WHERE user_id=?").bind(id).run();
+    await env.DB.prepare("DELETE FROM users WHERE id=?").bind(id).run();
+    await logActivity(env, admin.id, "admin_user_removed", "user", id);
+    return json({ ok: true, removed: id });
+  }
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+  const action = String(body.action || "");
+  if (action === "ban" || action === "unban") {
+    const banned = action === "ban" ? 1 : 0;
+    await env.DB.prepare("UPDATE users SET is_banned=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(banned,id).run();
+    if (banned) {
+      await env.DB.prepare("DELETE FROM user_sessions WHERE user_id=?").bind(id).run();
+      await env.DB.prepare("UPDATE products SET published=0,expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE uploader_id=? AND published=1").bind(id).run();
+      await env.DB.prepare("UPDATE user_api_keys SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL").bind(id).run();
+      await env.DB.prepare("UPDATE promoters SET status='rejected' WHERE user_id=?").bind(id).run();
+    }
+    await logActivity(env, admin.id, banned ? "admin_user_banned" : "admin_user_unbanned", "user", id);
+    return json({ ok: true, user_id: id, is_banned: banned });
+  }
+  if (action === "demote") {
+    const promoter = await env.DB.prepare("SELECT id FROM promoters WHERE user_id=? AND status='approved' LIMIT 1").bind(id).first();
+    if (!promoter) return json({ ok: false, error: "This user does not have an active promoter account" }, 409);
+    await env.DB.prepare("UPDATE promoters SET status='rejected' WHERE user_id=?").bind(id).run();
+    await env.DB.prepare("UPDATE promoter_applications SET status='rejected',reviewed_at=CURRENT_TIMESTAMP WHERE user_id=? AND status IN ('pending','approved')").bind(id).run();
+    await env.DB.prepare("UPDATE products SET published=0,expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE uploader_id=? AND published=1").bind(id).run();
+    await env.DB.prepare("UPDATE user_api_keys SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL").bind(id).run();
+    await logActivity(env, admin.id, "admin_promoter_demoted", "user", id);
+    return json({ ok: true, user_id: id, promoter_status: "rejected" });
+  }
+  return json({ ok: false, error: "Choose ban, unban, or demote" }, 400);
 }
 async function handleAdminPromoters(request, env) {
   const admin = await requireAdmin(request,env);
@@ -1433,6 +1480,9 @@ export default {
       if (path === "/api/products" && request.method === "GET") return handleProducts(request, env);
       if (path === "/api/products" && request.method === "POST") return handleCreateProduct(request, env);
       if (path === "/api/admin/products" && request.method === "GET") return handleAdminProducts(request, env);
+      if (path === "/api/admin/users" && request.method === "GET") return handleAdminUsers(request, env);
+      const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
+      if (adminUserMatch && ["POST", "DELETE"].includes(request.method)) return handleAdminUserAction(request, env, adminUserMatch[1]);
       if ((path === "/auth/google" || path === "/auth/google/" ) && request.method === "GET") return handleGoogleStart(request, env);
       if (path === "/auth/google/callback" && request.method === "GET") return handleGoogleCallback(request, env);
       if (path === "/api/me" && request.method === "GET") return handleMe(request, env);
