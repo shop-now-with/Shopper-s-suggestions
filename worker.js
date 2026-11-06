@@ -769,7 +769,18 @@ async function handleIntegrationProduct(request, env) {
     images.push(image);
   }
   if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
-  const result = await env.DB.prepare(`INSERT INTO products (title,description,affiliate_url,category,image1_url,image2_url,image3_url,image4_url,image5_url,video_url,published,featured,price,original_price,uploader_id,expires_at,listing_duration_hours) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','+72 hours'),72) RETURNING id`).bind(title,description,affiliateUrl,category,...images,videoUrl,1,0,price,originalPrice,owner.id).first();
+  const isAdmin = !!adminRow;
+  if (!isAdmin) {
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP").bind(owner.id).first();
+    if (Number(active?.count||0)>=5) return json({ok:false,error:"You already have 5 live listings. Wait for one to expire or remove one before uploading another."},409);
+  }
+  const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
+  if (!isAdmin && mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix))) {
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
+  }
+  const permanent = isAdmin && isTrue(body.permanent);
+  const result = await env.DB.prepare(`INSERT INTO products (title,description,affiliate_url,category,image1_url,image2_url,image3_url,image4_url,image5_url,video_url,published,featured,price,original_price,uploader_id,expires_at,listing_duration_hours) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?=1 THEN NULL ELSE datetime('now','+72 hours') END,?) RETURNING id`).bind(title,description,affiliateUrl,category,...images,videoUrl,1,0,price,originalPrice,owner.id,permanent?1:0,permanent?0:72).first();
   const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=?`).bind(result.id).first();
   return json({ ok: true, product: productPublic(product) }, 201);
 }
@@ -841,7 +852,8 @@ async function handleUpdateProduct(request, env, id) {
   for (let i = 1; i <= 5; i++) images.push(body[`image${i}_url`] === undefined ? (existing[`image${i}_url`] || "") : validHttpUrl(clean(body[`image${i}_url`], 3000)));
   const price = body.price === undefined ? existing.price : numberOrNull(body.price);
   const originalPrice = body.original_price === undefined && body.originalPrice === undefined && body.mrp === undefined ? existing.original_price : numberOrNull(body.original_price ?? body.originalPrice ?? body.mrp);
-  const uploaderId = body.uploader_id === undefined && body.user_id === undefined ? existing.uploader_id : numberOrNull(body.uploader_id ?? body.user_id);
+  if (!admin && (body.uploader_id !== undefined || body.user_id !== undefined)) return json({ok:false,error:"Only an administrator can change the listing owner"},403);
+  const uploaderId = !admin || (body.uploader_id === undefined && body.user_id === undefined) ? existing.uploader_id : numberOrNull(body.uploader_id ?? body.user_id);
   if (uploaderId !== null && uploaderId !== undefined && !(await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(uploaderId).first())) return json({ ok: false, error: "Uploader account was not found" }, 400);
   const published = body.published === undefined ? Number(existing.published) : (isTrue(body.published) ? 1 : 0);
   const featured = body.featured === undefined ? Number(existing.featured) : (isTrue(body.featured) ? 1 : 0);
