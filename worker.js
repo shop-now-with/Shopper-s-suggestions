@@ -618,6 +618,10 @@ async function handleRaiseProduct(request, env, id) {
   if (!product) return json({ ok:false, error:"Product not found" }, 404);
   if (!admin && Number(product.uploader_id) !== Number(user.id)) return json({ ok:false, error:"Only the listing owner or an administrator can raise this listing" }, 403);
   const hours = 72;
+  if (!admin) {
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP AND id<>?").bind(user.id,id).first();
+    if (Number(active?.count||0)>=5) return json({ok:false,error:"You already have 5 live listings. Remove or wait for another listing to expire before bumping this one."},409);
+  }
   await env.DB.prepare("UPDATE products SET published=1, expires_at=datetime('now', ?), listing_duration_hours=?, raised_at=CURRENT_TIMESTAMP, expired_at=NULL, created_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(`+${hours} hours`, hours, id).run();
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=?`).bind(id).first();
   return json({ok:true, product:productPublic(updated), message:`Listing raised for another 72 hours. Re-upload images if they were removed after expiry.`});
@@ -632,7 +636,7 @@ async function handleProducts(request, env) {
   let limit = Number(url.searchParams.get("limit") || 100);
   if (!Number.isFinite(limit)) limit = 100;
   limit = Math.max(1, Math.min(limit, 200));
-  const conditions = ["p.published = 1", "p.expires_at IS NOT NULL", "p.expires_at > CURRENT_TIMESTAMP"];
+  const conditions = ["p.published = 1", "(p.expires_at IS NULL OR p.expires_at > CURRENT_TIMESTAMP)"];
   const values = [];
   if (category && category !== "All") { conditions.push("p.category = ?"); values.push(category); }
   if (search) {
@@ -774,7 +778,6 @@ async function handleCreateProduct(request, env) {
   const admin = await adminUser(request, env);
   const user = await currentUser(request, env);
   const promoter = user ? await approvedPromoter(env,user.id) : null;
-  const subscription = user ? await activePromoterSubscription(env,user.id) : null;
   if (!admin && !promoter) return json({ok:false,error:"Only approved promoters or administrators can publish listings"},403);
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
@@ -793,15 +796,26 @@ async function handleCreateProduct(request, env) {
   
   const durationHours = 72;
   const uploaderId = admin ? numberOrNull(body.uploader_id ?? body.user_id) : Number(user.id);
+  if (!admin) {
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP").bind(user.id).first();
+    if (Number(active?.count||0)>=5) return json({ok:false,error:"You already have 5 live listings. Wait for one to expire or remove one before uploading another."},409);
+  }
+  const permanent = !!admin && isTrue(body.permanent);
+  const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
+  const hasUploadedImage = !!mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix));
+  if (hasUploadedImage) {
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. You can still use direct image links."},409);
+  }
   if (uploaderId !== null) {
     const exists = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(uploaderId).first();
     if (!exists) return json({ ok: false, error: "Uploader account was not found" }, 400);
   }
   const result = await env.DB.prepare(`
     INSERT INTO products (title, description, affiliate_url, category, image1_url, image2_url, image3_url, image4_url, image5_url, video_url, published, featured, price, original_price, uploader_id, expires_at, listing_duration_hours)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?), ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ?=1 THEN NULL ELSE datetime('now', ?) END, ?)
     RETURNING id
-  `).bind(title, description, affiliateUrl, category, ...images, videoUrl, body.published === undefined ? 1 : (isTrue(body.published) ? 1 : 0), isTrue(body.featured) ? 1 : 0, price, originalPrice, uploaderId, `+${durationHours} hours`, durationHours).first();
+  `).bind(title, description, affiliateUrl, category, ...images, videoUrl, body.published === undefined ? 1 : (isTrue(body.published) ? 1 : 0), isTrue(body.featured) ? 1 : 0, price, originalPrice, uploaderId, permanent?1:0, `+${durationHours} hours`, permanent?0:durationHours).first();
   const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).bind(result.id).first();
   return json({ ok: true, product: productPublic(product) }, 201);
 }
@@ -825,16 +839,15 @@ async function handleUpdateProduct(request, env, id) {
   if (rawAffiliate !== undefined && rawAffiliate && !affiliateUrl) return json({ ok: false, error: "Shopping link must be a valid http or https URL" }, 400);
   const images = [];
   for (let i = 1; i <= 5; i++) images.push(body[`image${i}_url`] === undefined ? (existing[`image${i}_url`] || "") : validHttpUrl(clean(body[`image${i}_url`], 3000)));
-  const activeSubForEdit = user ? await activePromoterSubscription(env,user.id) : null;
-  if (!admin && !activeSubForEdit && Object.keys(body).some(key => /^image[1-5]_url$/.test(key) && clean(body[key],3000))) return json({ok:false,error:"Adding product images requires an active ₹165/month promoter subscription"},403);
   const price = body.price === undefined ? existing.price : numberOrNull(body.price);
   const originalPrice = body.original_price === undefined && body.originalPrice === undefined && body.mrp === undefined ? existing.original_price : numberOrNull(body.original_price ?? body.originalPrice ?? body.mrp);
   const uploaderId = body.uploader_id === undefined && body.user_id === undefined ? existing.uploader_id : numberOrNull(body.uploader_id ?? body.user_id);
   if (uploaderId !== null && uploaderId !== undefined && !(await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(uploaderId).first())) return json({ ok: false, error: "Uploader account was not found" }, 400);
   const published = body.published === undefined ? Number(existing.published) : (isTrue(body.published) ? 1 : 0);
   const featured = body.featured === undefined ? Number(existing.featured) : (isTrue(body.featured) ? 1 : 0);
-  await env.DB.prepare(`UPDATE products SET title=?, description=?, affiliate_url=?, category=?, image1_url=?, image2_url=?, image3_url=?, image4_url=?, image5_url=?, video_url=?, published=?, featured=?, price=?, original_price=?, uploader_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-    .bind(title, description, affiliateUrl, category, ...images, videoUrl, published, featured, price, originalPrice, uploaderId ?? null, id).run();
+  const expiresAt = admin && isTrue(body.permanent) ? null : existing.expires_at;
+  await env.DB.prepare(`UPDATE products SET title=?, description=?, affiliate_url=?, category=?, image1_url=?, image2_url=?, image3_url=?, image4_url=?, image5_url=?, video_url=?, published=?, featured=?, price=?, original_price=?, uploader_id=?, expires_at=?, listing_duration_hours=CASE WHEN ? IS NULL THEN 0 ELSE listing_duration_hours END, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .bind(title, description, affiliateUrl, category, ...images, videoUrl, published, featured, price, originalPrice, uploaderId ?? null, expiresAt, expiresAt, id).run();
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).bind(id).first();
   return json({ ok: true, product: productPublic(updated) });
 }
@@ -861,8 +874,11 @@ async function handleUploadMedia(request, env) {
   const admin = await adminUser(request,env);
   const user = await currentUser(request,env);
   const promoter = user ? await approvedPromoter(env,user.id) : null;
-  const subscription = user ? await activePromoterSubscription(env,user.id) : null;
   if (!admin && !promoter) return json({ok:false,error:"Become a promoter before uploading product media"},403);
+  if (!admin) {
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
+  }
   if (!(request.headers.get("Content-Type") || "").startsWith("multipart/form-data")) return json({ ok: false, error: "Expected multipart/form-data" }, 400);
   const form = await request.formData();
   const file = form.get("file") || form.get("image") || form.get("media");
@@ -1028,6 +1044,15 @@ async function handleFavorite(request, env, promoterId) {
 async function handlePromoterApplication(request, env) {
   const user = await requireUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
+  if (request.method === "DELETE") {
+    const promoter = await approvedPromoter(env,user.id);
+    if (!promoter) return json({ok:false,error:"No active promoter account was found"},404);
+    await env.DB.prepare("UPDATE products SET published=0,expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE uploader_id=? AND published=1").bind(user.id).run();
+    await env.DB.prepare("UPDATE user_api_keys SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL").bind(user.id).run();
+    await env.DB.prepare("DELETE FROM promoters WHERE user_id=?").bind(user.id).run();
+    await logActivity(env,user.id,"promoter_account_removed","user",user.id);
+    return json({ok:true,message:"Promoter account removed. Your active listings were unpublished and API keys revoked."});
+  }
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
   const source = clean(body.affiliate_source, 300);
@@ -1180,12 +1205,32 @@ async function handleAnnouncements(request, env) {
   return json({ ok: true, announcement: inserted, email_requested: emailRequested, email_configured: !!delivery.configured, email_sent: !!delivery.configured && Number(delivery.sent || 0) > 0, email_count: Number(delivery.sent || 0), email_total: Number(delivery.total || 0) }, 201);
 }
 async function handleUserSearch(request, env) {
-  const user = await requireUser(request, env);
-  if (!user) return json({ ok: false, error: "Sign in required" }, 401);
+  const viewer = await currentUser(request, env);
   const q = clean(new URL(request.url).searchParams.get("q"), 60).replace(/^@/, "").toLowerCase();
   if (q.length < 2) return json({ ok: true, users: [] });
-  const result = await env.DB.prepare("SELECT id, username, display_name, avatar_url FROM users WHERE id != ? AND username IS NOT NULL AND lower(username) LIKE ? AND is_banned = 0 ORDER BY username LIMIT 30").bind(user.id, `%${q}%`).all();
-  return json({ ok: true, users: result.results || [] });
+  const result = await env.DB.prepare(`SELECT u.id,u.username,u.display_name,u.avatar_url,
+    CASE WHEN p.id IS NOT NULL AND p.status='approved' THEN 1 ELSE 0 END AS is_promoter
+    FROM users u LEFT JOIN promoters p ON p.user_id=u.id
+    WHERE u.username IS NOT NULL AND lower(u.username) LIKE ? AND u.is_banned=0
+    ORDER BY u.username LIMIT 30`).bind(`%${q}%`).all();
+  return json({ok:true,users:(result.results||[]).filter(row=>!viewer||Number(row.id)!==Number(viewer.id))});
+}
+async function handlePublicUserProfile(request, env, userId) {
+  const viewer = await currentUser(request, env);
+  const user = await env.DB.prepare(`SELECT u.id,u.username,u.display_name,u.avatar_url,u.bio,u.created_at,
+    CASE WHEN p.id IS NOT NULL AND p.status='approved' THEN 1 ELSE 0 END AS is_promoter,
+    p.id AS promoter_id,
+    (SELECT COUNT(*) FROM products prd WHERE prd.uploader_id=u.id AND prd.published=1 AND (prd.expires_at IS NULL OR prd.expires_at>CURRENT_TIMESTAMP)) AS active_listings,
+    (SELECT COUNT(*) FROM user_favorites uf JOIN promoters pp ON pp.id=uf.promoter_id WHERE pp.user_id=u.id) AS followers_count,
+    CASE WHEN ? IS NOT NULL AND p.id IS NOT NULL AND EXISTS(SELECT 1 FROM user_favorites f WHERE f.user_id=? AND f.promoter_id=p.id) THEN 1 ELSE 0 END AS is_favorited
+    FROM users u LEFT JOIN promoters p ON p.user_id=u.id AND p.status='approved'
+    WHERE u.id=? AND u.is_banned=0 LIMIT 1`).bind(viewer?.id||null,viewer?.id||null,userId).first();
+  if (!user) return json({ok:false,error:"Profile not found"},404);
+  const settings = await env.DB.prepare("SELECT profile_public FROM user_settings WHERE user_id=?").bind(userId).first();
+  if (Number(settings?.profile_public ?? 1)!==1 && Number(viewer?.id)!==Number(userId)) return json({ok:false,error:"This profile is private"},403);
+  const products = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.uploader_id=? AND p.published=1 AND (p.expires_at IS NULL OR p.expires_at>CURRENT_TIMESTAMP) ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 50`).bind(userId).all();
+  const clicks = await env.DB.prepare("SELECT COUNT(*) AS total FROM product_clicks pc JOIN products p ON p.id=pc.product_id WHERE p.uploader_id=?").bind(userId).first();
+  return json({ok:true,user:{...user,followers_count:Number(user.followers_count||0),active_listings:Number(user.active_listings||0),clicks_received:Number(clicks?.total||0),is_favorited:Number(user.is_favorited)===1},products:(products.results||[]).map(productPublic)});
 }
 async function handleConversations(request, env) {
   const user = await requireUser(request, env);
@@ -1342,6 +1387,8 @@ export default {
       if (path === "/api/announcements" && request.method === "GET") return handleAnnouncements(request, env);
       if (path === "/api/notices" && request.method === "GET") return handleMyNotices(request, env);
       if (path === "/api/users/search" && request.method === "GET") return handleUserSearch(request, env);
+      const publicProfileMatch = path.match(/^\/api\/users\/(\d+)$/);
+      if (publicProfileMatch && request.method === "GET") return handlePublicUserProfile(request, env, publicProfileMatch[1]);
       if (path === "/api/my/products" && request.method === "GET") return handleMyProducts(request, env);
       if (path === "/api/my/analytics" && request.method === "GET") return handleMyAnalytics(request, env);
       if (path === "/api/subscription" && ["GET","POST"].includes(request.method)) return handleSubscription(request, env);
@@ -1378,7 +1425,7 @@ export default {
       if (path === "/api/profile" && ["GET", "PUT", "PATCH"].includes(request.method)) return handleProfile(request, env);
       if (path === "/api/settings" && ["GET", "PUT", "PATCH"].includes(request.method)) return handleSettings(request, env);
       if (path === "/api/promoters" && request.method === "GET") return handlePromoters(request, env);
-      if (path === "/api/promoter-application" && request.method === "POST") return handlePromoterApplication(request, env);
+      if (path === "/api/promoter-application" && ["POST","DELETE"].includes(request.method)) return handlePromoterApplication(request, env);
       const favoriteMatch = path.match(/^\/api\/promoters\/(\d+)\/favorite$/);
       if (favoriteMatch && ["POST", "DELETE"].includes(request.method)) return handleFavorite(request, env, favoriteMatch[1]);
       const raiseMatch = path.match(/^\/api\/products\/(\d+)\/raise$/);
