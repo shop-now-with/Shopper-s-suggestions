@@ -67,9 +67,9 @@ list.innerHTML=users.map(function(u){
 var isAdmin=Number(u.is_admin)===1,promoter=u.promoter_status==="approved",banned=Number(u.is_banned)===1;
 var label=u.display_name||u.username||("User "+u.id);
 var actions=isAdmin?'<span class="muted">Protected administrator</span>':
-(banned?'<button class="btn" type="button" data-user-action="unban" data-user-id="'+esc(u.id)+'">Unban</button>':'<button class="btn" type="button" data-user-action="ban" data-user-id="'+esc(u.id)+'">Ban</button>')+
-(promoter?'<button class="btn" type="button" data-user-action="demote" data-user-id="'+esc(u.id)+'">Demote promoter</button>':'')+
-'<button class="btn" type="button" data-remove-user="'+esc(u.id)+'">Remove user</button>';
+(banned?'<button class="btn" type="button" data-user-action="unban" data-user-id="'+esc(u.id)+'"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>Unban</button>':'<button class="btn" type="button" data-user-action="ban" data-user-id="'+esc(u.id)+'"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg>Ban</button>')+
+(promoter?'<button class="btn" type="button" data-user-action="demote" data-user-id="'+esc(u.id)+'"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 12h14"/></svg>Demote promoter</button>':'')+
+'<button class="btn" type="button" data-remove-user="'+esc(u.id)+'"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>Remove user</button>';
 return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);flex-wrap:wrap"><span><strong>'+esc(label)+'</strong><br><small>'+esc(u.email||"No email")+' · #'+esc(u.id)+'</small><br><small>Status: '+(banned?"Banned":"Active")+' · '+(promoter?"Promoter":u.promoter_status==="rejected"?"Promoter access removed":"Regular user")+'</small></span><span style="display:flex;gap:6px;flex-wrap:wrap">'+actions+'</span></div>';
 }).join("")||'<p class="muted">No users found.</p>';
 status.textContent=users.length+" user account(s).";
