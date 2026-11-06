@@ -599,18 +599,31 @@ async function deleteExpiredProductMedia(env, product) {
   return clear;
 }
 async function cleanupExpiredProducts(env) {
-  const expired = await env.DB.prepare("SELECT * FROM products WHERE (published=1 AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP) OR (published=0 AND expired_at IS NOT NULL AND (image1_url!='' OR image2_url!='' OR image3_url!='' OR image4_url!='' OR image5_url!='')) LIMIT 100").all();
-  for (const product of expired.results || []) {
-    const clear = await deleteExpiredProductMedia(env, product);
-    const columns = [...clear].map(k => `${k}=''`).join(', ');
-    const assignments = ["published=0", "expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP)", "updated_at=CURRENT_TIMESTAMP", columns].filter(Boolean).join(', ');
-    await env.DB.prepare(`UPDATE products SET ${assignments} WHERE id=?`).bind(product.id).run();
-    await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(product.id).run();
-    await env.DB.prepare("DELETE FROM product_favorites WHERE product_id=?").bind(product.id).run();
+  // Stage 1: after 72 hours, hide the listing from Home but keep it in the
+  // owner's uploaded list for a further 48 hours so it can still be bumped.
+  const newlyExpired = await env.DB.prepare(
+    "SELECT id FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP LIMIT 200"
+  ).all();
+  for (const product of newlyExpired.results || []) {
+    await env.DB.prepare(
+      "UPDATE products SET published=0, expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP), updated_at=CURRENT_TIMESTAMP WHERE id=?"
+    ).bind(product.id).run();
   }
-  return (expired.results || []).length;
+
+  // Stage 2: once the 48-hour bump window has passed, permanently delete
+  // the product row and its related records. Media cleanup is attempted first.
+  const readyToDelete = await env.DB.prepare(
+    "SELECT * FROM products WHERE published=0 AND expired_at IS NOT NULL AND expired_at <= datetime('now','-48 hours') LIMIT 100"
+  ).all();
+  for (const product of readyToDelete.results || []) {
+    try { await deleteExpiredProductMedia(env, product); }
+    catch (error) { console.error("Final expired product media cleanup failed:", error); }
+    await env.DB.prepare("DELETE FROM products WHERE id=?").bind(product.id).run();
+  }
+  return (newlyExpired.results || []).length + (readyToDelete.results || []).length;
 }
 async function handleRaiseProduct(request, env, id) {
+  await cleanupExpiredProducts(env);
   const admin = await adminUser(request, env);
   const user = await currentUser(request, env);
   if (!user) return json({ ok:false, error:"Sign in required" }, 401);
