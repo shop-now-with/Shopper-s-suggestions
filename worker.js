@@ -1032,8 +1032,9 @@ async function handlePromoters(request, env) {
 async function handleFavorite(request, env, promoterId) {
   const user = await requireUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
-  const promoter = await env.DB.prepare("SELECT id FROM promoters WHERE id = ? AND status = 'approved'").bind(promoterId).first();
+  const promoter = await env.DB.prepare("SELECT id, user_id FROM promoters WHERE id = ? AND status = 'approved'").bind(promoterId).first();
   if (!promoter) return json({ ok: false, error: "Promoter not found" }, 404);
+  if (Number(promoter.user_id) === Number(user.id)) return json({ ok: false, error: "You cannot favourite your own account." }, 403);
   if (request.method === "POST") {
     await env.DB.prepare("INSERT OR IGNORE INTO user_favorites (user_id, promoter_id) VALUES (?, ?)").bind(user.id, promoterId).run();
   } else {
