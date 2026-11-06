@@ -1480,7 +1480,6 @@ export default {
       if (path === "/api/products" && request.method === "GET") return handleProducts(request, env);
       if (path === "/api/products" && request.method === "POST") return handleCreateProduct(request, env);
       if (path === "/api/admin/products" && request.method === "GET") return handleAdminProducts(request, env);
-      if (path === "/api/admin/users" && request.method === "GET") return handleAdminUsers(request, env);
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
       if (adminUserMatch && ["POST", "DELETE"].includes(request.method)) return handleAdminUserAction(request, env, adminUserMatch[1]);
       if ((path === "/auth/google" || path === "/auth/google/" ) && request.method === "GET") return handleGoogleStart(request, env);
