@@ -644,9 +644,6 @@ async function handleProducts(request, env) {
     const q = `%${search}%`; values.push(q, q, q);
   }
   if (featured) conditions.push("p.featured = 1");
-  const viewer = await currentUser(request,env);
-  const viewerSubscription = viewer ? await activePromoterSubscription(env,viewer.id) : null;
-  if (viewerSubscription) { conditions.push("NOT EXISTS (SELECT 1 FROM hidden_products hp WHERE hp.product_id=p.id AND hp.user_id=? AND hp.hidden_until>CURRENT_TIMESTAMP)"); values.push(viewer.id); }
   const sql = `${PRODUCT_SELECT} WHERE ${conditions.join(" AND ")} ORDER BY datetime(p.created_at) DESC, p.id DESC LIMIT ?`;
   values.push(limit);
   const result = await env.DB.prepare(sql).bind(...values).all();
@@ -693,21 +690,14 @@ async function handleMyProducts(request, env) {
 async function handleHideProduct(request, env, productId) {
   const user=await requireUser(request,env);
   if(!user)return json({ok:false,error:"Sign in required"},401);
-  const subscription=await activePromoterSubscription(env,user.id);
-  if(!subscription)return json({ok:false,error:"Hiding products until your subscription ends requires an active ₹165/month subscription"},403);
-  const product=await env.DB.prepare("SELECT id FROM products WHERE id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP").bind(productId).first();
-  if(!product)return json({ok:false,error:"Product not found or expired"},404);
-  if(request.method==="POST") await env.DB.prepare("INSERT INTO hidden_products(user_id,product_id,hidden_until) VALUES(?,?,?) ON CONFLICT(user_id,product_id) DO UPDATE SET hidden_until=excluded.hidden_until,created_at=CURRENT_TIMESTAMP").bind(user.id,productId,subscription.expires_at).run();
-  else await env.DB.prepare("DELETE FROM hidden_products WHERE user_id=? AND product_id=?").bind(user.id,productId).run();
-  return json({ok:true,hidden:request.method==="POST",hidden_until:request.method==="POST"?subscription.expires_at:null});
+  return json({ok:false,error:"Paid-plan features are not available yet."},503);
 }
 
 async function handleSubscription(request, env) {
   const user = await requireUser(request, env);
   if (!user) return json({ok:false,error:"Sign in required"},401);
-  const active = await activePromoterSubscription(env,user.id);
-  if (request.method === "GET") return json({ok:true,plan:{price_inr:165,period:"month",image_uploads:!!active,listing_days:active?30:3},subscription:active||null,payment_status:env.PAYMENT_PROVIDER&&env.PAYMENT_API_KEY?"provider_configured_checkout_not_implemented":"setup_required"});
-  return json({ok:false,error:"₹165/month subscription checkout is not enabled yet. No payment was taken. Configure a real provider and signed webhook before activating a subscription.",status:"setup_required"},503);
+  if (request.method === "GET") return json({ok:true,enabled:false,status:"not_available",message:"Paid plans are not available yet."});
+  return json({ok:false,error:"Paid plans are not available yet. No payment was taken.",status:"not_available"},503);
 }
 
 
