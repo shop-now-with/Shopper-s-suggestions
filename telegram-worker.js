@@ -662,6 +662,8 @@ async function sendHelp(env, chatId) {
     `/editproduct — Edit one of your products\n` +
     `/deleteproduct — Delete one of your products\n` +
     `/disconnect — Disconnect your account\n` +
+    `/adsrun — Set up product promotions 📢\n` +
+    `/myid — Show your Telegram user ID 🆔\n` +
     `/cancel — Cancel the current action`;
   return telegramApi(env, "sendMessage", {
     chat_id: chatId,
@@ -1510,6 +1512,8 @@ async function handleTelegramUpdate(update, env) {
           { command: "editproduct", description: "Edit your product" },
           { command: "deleteproduct", description: "Delete your product" },
           { command: "disconnect", description: "Disconnect your account" },
+          { command: "adsrun", description: "Set up product promotions" },
+          { command: "myid", description: "Show your Telegram user ID" },
           { command: "cancel", description: "Cancel the current action" }
         ]
       });
@@ -1549,7 +1553,30 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","cancel"]);
+  if (command === "adsrun") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Open a private chat with the bot and use /adsrun there." });
+      return;
+    }
+    try {
+      await getTelegramPromoterProducts(env, chatId, user.id);
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Connect your approved Shopper's Suggestions promoter account first with /connect." });
+      return;
+    }
+    await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: "📢 <b>Shopper's Suggestions Ads</b>\n\nChoose a promotion plan:\n\n🆓 <b>Free Plan</b> — Verify 3 groups/channels. Ads every 60 minutes.\n\n⭐ <b>Paid Plan</b> — ₹150/month. Ads every 30 minutes.\n\nChoose below to continue.",
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [[
+        { text: "🆓 Free Plan", callback_data: "adsrun:free" },
+        { text: "⭐ Paid Plan — ₹150/month", callback_data: "adsrun:paid" }
+      ]] }
+    });
+    return;
+  }
+
+  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","myid","getid","id","cancel"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
@@ -2255,6 +2282,8 @@ async function setupTelegramWebhook(request, env) {
       { command: "editproduct", description: "Edit your product" },
       { command: "deleteproduct", description: "Delete your product" },
       { command: "disconnect", description: "Disconnect your account" },
+      { command: "adsrun", description: "Set up product promotions" },
+      { command: "myid", description: "Show your Telegram user ID" },
       { command: "cancel", description: "Cancel the current action" }
     ]
   });
