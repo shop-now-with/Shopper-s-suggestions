@@ -1451,7 +1451,7 @@ async function verifyAdsGroup(env, message) {
   const nextBatch = batchComplete ? adsSqlAfterDays(20) : (account?.next_group_batch_at || null);
   await env.DB.prepare("INSERT INTO telegram_ads_verified_chats (chat_id,telegram_user_id,chat_type,title,verified_at,active,batch_number) VALUES (?,?,?,?,?,1,?) ON CONFLICT(chat_id) DO UPDATE SET telegram_user_id=excluded.telegram_user_id,chat_type=excluded.chat_type,title=excluded.title,verified_at=excluded.verified_at,active=1,batch_number=excluded.batch_number")
     .bind(chatId, telegramUserId, chat.type, cleanText(chat.title || chat.username || "Telegram group", 200), nowSql(), batchNumber).run();
-  await env.DB.prepare("UPDATE telegram_ads_accounts SET groups_in_batch=?,batch_number=?,next_group_batch_at=?,next_run_at=CASE WHEN ? >= 3 AND next_run_at IS NULL THEN ? ELSE next_run_at END,updated_at=? WHERE telegram_user_id=?")
+  await env.DB.prepare("UPDATE telegram_ads_accounts SET groups_in_batch=?,batch_number=?,next_group_batch_at=?,next_run_at=CASE WHEN ? >= 3 THEN ? ELSE next_run_at END,updated_at=? WHERE telegram_user_id=?")
     .bind(newCount % 3, batchNumber, nextBatch, newCount, nowSql(), nowSql(), telegramUserId).run();
   await telegramApi(env, "sendMessage", {
     chat_id: chatId,
@@ -1958,6 +1958,10 @@ async function handleTelegramUpdate(update, env) {
             `/chats\n` +
             `/refreshchat CHAT_ID\n` +
             `/stats\n` +
+            `/stats\n` +
+            `/setadsqr — Set paid plan QR\n` +
+            `/showadsqr — View current QR\n` +
+            `/removeadsqr — Remove current QR\n` +
             `/lock`,
           parse_mode: "HTML"
         });
@@ -2486,7 +2490,7 @@ async function handleAdsPaymentUtr(env, session, chatId, userId, text) {
 async function runTelegramAdsScheduler(env) {
   await ensureSchema(env);
   const now = nowSql();
-  const due = await env.DB.prepare("SELECT * FROM telegram_ads_accounts WHERE next_run_at IS NULL OR next_run_at<=? ORDER BY COALESCE(next_run_at, created_at) LIMIT 100").bind(now).all();
+  const due = await env.DB.prepare("SELECT a.* FROM telegram_ads_accounts a WHERE (a.next_run_at IS NULL OR a.next_run_at<=?) AND ((a.plan='paid' AND a.paid_until>? AND EXISTS (SELECT 1 FROM telegram_ads_verified_chats g WHERE g.telegram_user_id=a.telegram_user_id AND g.active=1)) OR ((a.plan!='paid' OR a.paid_until IS NULL OR a.paid_until<=?) AND (SELECT COUNT(*) FROM telegram_ads_verified_chats g WHERE g.telegram_user_id=a.telegram_user_id AND g.active=1)>=3)) ORDER BY COALESCE(a.next_run_at,a.created_at) LIMIT 100").bind(now,now,now).all();
   for (const account of due.results || []) {
     const userId = String(account.telegram_user_id);
     const paidUntil = account.paid_until ? Date.parse(String(account.paid_until).replace(" ", "T") + "Z") : 0;
