@@ -232,6 +232,34 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
 }
 
 
+async function getTelegramConnectedProfile(env, chatId, telegramUserId) {
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your Shopper's Suggestions account first using /connect.");
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const keyHash = await hashText(apiKey);
+  const profile = await env.DB.prepare("SELECT u.id,u.username,u.display_name,u.avatar_url,u.bio,p.id AS promoter_id,p.display_name AS promoter_name,p.username AS promoter_username,p.status AS promoter_status,(SELECT COUNT(*) FROM products pr WHERE pr.uploader_id=u.id AND pr.published=1 AND (pr.expires_at IS NULL OR pr.expires_at>CURRENT_TIMESTAMP)) AS active_products,(SELECT COUNT(*) FROM product_clicks pc JOIN products pr ON pr.id=pc.product_id WHERE pr.uploader_id=u.id) AS clicks,(SELECT COUNT(*) FROM user_favorites uf WHERE uf.promoter_id=p.id) AS followers FROM user_api_keys k JOIN users u ON u.id=k.user_id LEFT JOIN promoters p ON p.user_id=u.id WHERE k.key_hash=? AND k.revoked_at IS NULL AND u.is_banned=0 LIMIT 1").bind(keyHash).first();
+  if (!profile) throw new Error("Your connected profile could not be found. Please reconnect using /connect.");
+  const setting = await env.DB.prepare("SELECT profile_public FROM user_settings WHERE user_id=?").bind(profile.id).first();
+  if (Number(setting?.profile_public ?? 1) !== 1) throw new Error("Your website profile is private. Make it public in profile settings to show it here.");
+  return profile;
+}
+
+async function sendTelegramConnectedProfile(env, chatId, telegramUserId) {
+  const p = await getTelegramConnectedProfile(env, chatId, telegramUserId);
+  const display = p.display_name || p.promoter_name || p.username || p.promoter_username || "Shopper's Suggestions user";
+  const profileUrl = SITE_URL + "/profile.html?id=" + encodeURIComponent(p.id);
+  const body = "👤 <b>" + escapeTelegramHtml(display) + "</b>\n" +
+    (p.username ? "🔖 @" + escapeTelegramHtml(p.username) + "\n" : "") +
+    "🏷️ <b>Promoter:</b> " + (p.promoter_status === "approved" ? "✅ Approved" : escapeTelegramHtml(p.promoter_status || "Not active")) + "\n" +
+    "🛍️ <b>Live products:</b> " + Number(p.active_products || 0) + "\n" +
+    "👥 <b>Followers:</b> " + Number(p.followers || 0) + "\n" +
+    "👆 <b>Product clicks:</b> " + Number(p.clicks || 0) + "\n\n" +
+    "📝 " + escapeTelegramHtml(p.bio || "No bio added yet.") + "\n\n" +
+    "🌐 <a href=\"" + profileUrl + "\">Open full profile</a>";
+  const markup = { inline_keyboard: [[{ text: "🌐 View profile", url: profileUrl }]] };
+  if (p.avatar_url) await telegramApi(env, "sendPhoto", { chat_id: chatId, photo: p.avatar_url, caption: body, parse_mode: "HTML", reply_markup: markup });
+  else await telegramApi(env, "sendMessage", { chat_id: chatId, text: body, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+}
 async function getTelegramPromoterProducts(env, chatId, telegramUserId) {
   const link = await getPromoterTelegramLink(env, telegramUserId);
   if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your promoter account first using /connect.");
@@ -349,19 +377,7 @@ function escapeTelegramHtml(value) {
 }
 
 function productButton(product) {
-  return {
-    inline_keyboard: [[
-      {
-        text: "🛒 MAKE IT YOURS!",
-        url: cleanText(product?.affiliate_url, 3000)
-      }
-    ], [
-      {
-        text: "🔗 View on Shopper's Suggestions",
-        url: productShareUrl(product?.id)
-      }
-    ]]
-  };
+  return { inline_keyboard: [[{ text: "🛒 GET PRODUCT", url: productShareUrl(product?.id) }]] };
 }
 
 function telegramCaption(product) {
@@ -627,6 +643,12 @@ async function sendHelp(env, chatId) {
     `/start — Open the bot\n` +
     `/help — Show instructions\n` +
     `/connect — Connect your account\n` +
+    `/profile — View your full profile 👤\n` +
+    `/products — Browse live products 🛍️\n` +
+    `/latest — See newest products 🆕\n` +
+    `/search — Search products 🔎\n` +
+    `/categories — Browse categories 📂\n` +
+    `/featured — Special product picks ⭐\n` +
     `/addproduct — Upload a product\n` +
     `/myproducts — View your products\n` +
     `/editproduct — Edit one of your products\n` +
@@ -1469,6 +1491,12 @@ async function handleTelegramUpdate(update, env) {
           { command: "start", description: "Open the bot" },
           { command: "help", description: "Show instructions" },
           { command: "connect", description: "Connect your account" },
+          { command: "profile", description: "View your profile" },
+          { command: "products", description: "Browse live products" },
+          { command: "latest", description: "See newest products" },
+          { command: "search", description: "Search products" },
+          { command: "categories", description: "Browse categories" },
+          { command: "featured", description: "View featured products" },
           { command: "addproduct", description: "Upload a product" },
           { command: "myproducts", description: "View your products" },
           { command: "editproduct", description: "Edit your product" },
@@ -1491,12 +1519,29 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
+  if (command === "profile") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "👤 Open a private chat with the bot to view your connected profile." });
+      return;
+    }
+    try { await sendTelegramConnectedProfile(env, chatId, user.id); }
+    catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⚠️ " + escapeTelegramHtml(error.message || "Could not load your profile."), parse_mode: "HTML" });
+    }
+    return;
+  }
+
+  if (command === "products" || command === "browse") {
+    await sendLatest(env, chatId);
+    return;
+  }
+
   if (command === "help") {
     await sendHelp(env, chatId);
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","addproduct","myproducts","editproduct","deleteproduct","disconnect","cancel"]);
+  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","cancel"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
