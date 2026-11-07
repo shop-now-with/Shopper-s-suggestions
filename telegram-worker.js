@@ -1447,7 +1447,7 @@ async function handleTelegramUpdate(update, env) {
 
   if (command === "addproduct") {
     if (chat?.type !== "private" || !user?.id) {
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /upload in a private chat with the official bot." });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /addproduct in a private chat with the official bot." });
       return;
     }
     const link = await getPromoterTelegramLink(env, user.id);
