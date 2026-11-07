@@ -1578,7 +1578,7 @@ export default {
       if (clickMatch && request.method === "GET") return handleTrackClick(request, env, clickMatch[1]);
       if (path === "/api/my/api-key" && ["GET", "POST", "DELETE"].includes(request.method)) return handleMyApiKey(request, env);
       if (path === "/api/integrations/products" && ["GET", "POST"].includes(request.method)) return handleIntegrationProduct(request, env);
-      const integrationProductMatch = path.match(/^\\/api\\/integrations\\/products\\/(\\d+)$/);
+      const integrationProductMatch = path.match(/^\/api\/integrations\/products\/(\d+)$/);
       if (integrationProductMatch && ["PUT", "PATCH", "DELETE"].includes(request.method)) return handleIntegrationProductById(request, env, Number(integrationProductMatch[1]));
       if (path === "/api/upload-media" && request.method === "POST") return handleUploadMedia(request, env);
       if (path === "/api/delete-media" && request.method === "POST") return handleDeleteMedia(request, env);
