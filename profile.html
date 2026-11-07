@@ -22,6 +22,7 @@ html[data-theme=dark]{color-scheme:dark;--ink:#edf1f7;--muted:#a7b2c2;--line:#30
 .ss-checkout-placeholder span{font-size:18px;font-weight:900;letter-spacing:2px;text-shadow:0 2px 12px rgba(0,0,0,.28);animation:ssTextPulse 2.4s ease-in-out infinite}
 @keyframes ssGradientLoop{0%{background-position:0% 50%;filter:hue-rotate(0deg)}50%{background-position:100% 50%;filter:hue-rotate(35deg)}100%{background-position:0% 50%;filter:hue-rotate(0deg)}}
 @keyframes ssTextPulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.06);opacity:1}}
+.panel,.product,.stat{transition:transform .22s ease,box-shadow .22s ease}.product:hover,.stat:hover,.panel:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
 </style><script>(function(){try{var s=JSON.parse(localStorage.getItem("ss_user_settings")||"{}");var t=s.theme||"system";var d=t==="dark"||(t==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.dataset.theme="dark";}catch(e){}})();</script>
 </head>
 <body>
