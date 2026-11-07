@@ -61,6 +61,16 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at TEXT NOT NULL
 );
+ 
+
+CREATE TABLE IF NOT EXISTS telegram_promoter_links (
+  telegram_user_id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  encrypted_api_key TEXT NOT NULL,
+  key_prefix TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `;
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -133,6 +143,92 @@ async function hashText(value) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function promoterKeyCryptoKey(env) {
+  const secret = cleanText(env.TELEGRAM_API_KEY_ENCRYPTION_SECRET, 500);
+  if (!secret) throw new Error("Bot security is not configured yet. Please contact Shopper's Suggestions support.");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  return Uint8Array.from(atob(value), c => c.charCodeAt(0));
+}
+
+async function encryptPromoterApiKey(env, apiKey) {
+  const key = await promoterKeyCryptoKey(env);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(apiKey));
+  return bytesToBase64(new Uint8Array([...iv, ...new Uint8Array(encrypted)]));
+}
+
+async function decryptPromoterApiKey(env, encryptedValue) {
+  const key = await promoterKeyCryptoKey(env);
+  const packed = base64ToBytes(encryptedValue);
+  const iv = packed.slice(0, 12);
+  const ciphertext = packed.slice(12);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return new TextDecoder().decode(decrypted);
+}
+
+async function getPromoterTelegramLink(env, telegramUserId) {
+  return env.DB.prepare("SELECT * FROM telegram_promoter_links WHERE telegram_user_id=? LIMIT 1")
+    .bind(String(telegramUserId)).first();
+}
+
+async function verifyPromoterApiKey(apiKey) {
+  const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: "{}"
+  });
+  const data = await response.json().catch(() => ({}));
+  return response.status === 400 && /title is required/i.test(String(data.error || ""));
+}
+
+async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey) {
+  const encrypted = await encryptPromoterApiKey(env, apiKey);
+  await env.DB.prepare(`
+    INSERT INTO telegram_promoter_links (telegram_user_id, chat_id, encrypted_api_key, key_prefix, created_at, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT(telegram_user_id) DO UPDATE SET
+      chat_id=excluded.chat_id,
+      encrypted_api_key=excluded.encrypted_api_key,
+      key_prefix=excluded.key_prefix,
+      updated_at=CURRENT_TIMESTAMP
+  `).bind(String(telegramUserId), String(chatId), encrypted, apiKey.slice(0, 16)).run();
+}
+
+async function createPromoterProductFromTelegramSession(env, chatId, telegramUserId) {
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your promoter account first using /connect.");
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const d = (await getTelegramSession(env, chatId, telegramUserId)).data || {};
+  const body = {
+    title: cleanText(d.title, 300),
+    description: cleanText(d.description, 10000),
+    affiliate_url: cleanText(d.affiliate_url, 2000),
+    category: cleanText(d.category, 100),
+    video_url: cleanText(d.video_url, 2000)
+  };
+  (Array.isArray(d.images) ? d.images : []).slice(0, 5).forEach((url, i) => body[`image${i + 1}_url`] = url);
+  const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok || !result.product) throw new Error(result.error || "The website could not publish this product.");
+  const telegramResult = await postProductToTelegramGroups(result.product, env);
+  await resetTelegramProductDraft(env, chatId);
+  return { product: result.product, telegramResult };
 }
 
 async function parseBody(request) {
