@@ -1182,10 +1182,10 @@ async function handleAccounts(request, env) {
 async function handlePromoters(request, env) {
   const user = await currentUser(request, env);
   const result = await env.DB.prepare(`
-    SELECT p.id, p.user_id, COALESCE(p.display_name, u.display_name, '') AS display_name,
-      COALESCE(p.username, u.username, '') AS username,
-      COALESCE(p.avatar_url, u.avatar_url, '') AS avatar_url,
-      COALESCE(p.bio, u.bio, '') AS bio,
+    SELECT p.id, p.user_id, COALESCE(u.display_name, p.display_name, '') AS display_name,
+      COALESCE(u.username, p.username, '') AS username,
+      COALESCE(u.avatar_url, p.avatar_url, '') AS avatar_url,
+      COALESCE(u.bio, p.bio, '') AS bio,
       p.status,
       (SELECT COUNT(*) FROM user_favorites f WHERE f.promoter_id = p.id) AS favorite_count,
       CASE WHEN ? IS NOT NULL AND EXISTS (SELECT 1 FROM user_favorites f2 WHERE f2.user_id = ? AND f2.promoter_id = p.id) THEN 1 ELSE 0 END AS is_favorited
@@ -1256,7 +1256,6 @@ async function handleProfile(request, env) {
     if (String(error?.message || error).toLowerCase().includes("unique")) return json({ ok: false, error: "That username is already taken." }, 409);
     throw error;
   }
-  await env.DB.prepare("UPDATE promoters SET display_name=?,username=?,avatar_url=?,bio=? WHERE user_id=?").bind(displayName,username || null,avatar,bio,user.id).run();
   const updated = await env.DB.prepare("SELECT id, email, username, display_name, avatar_url, bio, role, created_at FROM users WHERE id=?").bind(user.id).first();
   return json({ ok: true, user: updated });
 }
@@ -1361,7 +1360,8 @@ async function handleAdminUserAction(request, env, userId) {
     if (banned && !reason) return json({ ok: false, error: "A ban reason is required." }, 400);
     await env.DB.prepare("UPDATE users SET is_banned=?,ban_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(banned,reason,id).run();
     if (banned) {
-      await env.DB.prepare("DELETE FROM user_sessions WHERE user_id=?").bind(id).run();
+      // Keep the current session row so /api/me can display the ban reason to the affected user.
+      // The currentUser() helper still blocks all authenticated actions for banned accounts.
       await env.DB.prepare("UPDATE products SET published=0,expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE uploader_id=? AND published=1").bind(id).run();
       await env.DB.prepare("UPDATE user_api_keys SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL").bind(id).run();
       await env.DB.prepare("UPDATE promoters SET status='rejected' WHERE user_id=?").bind(id).run();
