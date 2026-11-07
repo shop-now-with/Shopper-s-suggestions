@@ -1266,7 +1266,7 @@ async function handleTelegramCallback(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: `Category selected: ${category}\n\nNow send product images one by one. Send /done when finished, or /skip for no more images.`
+      text: `Category selected: ${category}\n\nNow send product images one by one. Type done when finished, or skip for no more images.`
     });
   }
 }
@@ -1399,7 +1399,7 @@ async function handleTelegramUpdate(update, env) {
       s.data = { editProductId: id, editChanges: {} };
       s.step = "edit_title";
       await saveTelegramSession(env, s);
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Editing #${id}. Send a new title, or /skip to keep the current title:\n\n${cleanText(product.title, 250)}` });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Editing #${id}. Send a new title, or type skip to keep the current title:\n\n${cleanText(product.title, 250)}` });
     } catch (error) {
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: `❌ ${escapeTelegramHtml(error.message || "Could not start editing.")}`, parse_mode: "HTML" });
     }
@@ -1496,7 +1496,7 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","addproduct","myproducts","editproduct","deleteproduct","disconnect","cancel","skip","done","publish"]);
+  const allowedCommands = new Set(["start","help","connect","addproduct","myproducts","editproduct","deleteproduct","disconnect","cancel"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
@@ -1930,12 +1930,12 @@ async function handleTelegramUpdate(update, env) {
       if (key === "edit_description") changes.description = cleanText(text, 10000);
       if (key === "edit_link") {
         try { const u = new URL(text); if (!/^https?:$/.test(u.protocol)) throw new Error(); }
-        catch { await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send a valid http(s) affiliate link, or /skip." }); return; }
+        catch { await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send a valid http(s) affiliate link, or type skip." }); return; }
         changes.affiliate_url = text;
       }
       if (key === "edit_category") {
         if (!isValidCategory(text.trim())) {
-          await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That category isn't valid. Send one of the available categories, or /skip." });
+          await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That category isn't valid. Send one of the available categories, or type skip." });
           return;
         }
         changes.category = text.trim();
@@ -1945,19 +1945,19 @@ async function handleTelegramUpdate(update, env) {
     if (key === "edit_title") {
       s.step = "edit_description";
       await saveTelegramSession(env, s);
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send the new description, or /skip to keep it." });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send the new description, or type skip to keep it." });
       return;
     }
     if (key === "edit_description") {
       s.step = "edit_link";
       await saveTelegramSession(env, s);
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send the new affiliate link, or /skip to keep it." });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send the new affiliate link, or type skip to keep it." });
       return;
     }
     if (key === "edit_link") {
       s.step = "edit_category";
       await saveTelegramSession(env, s);
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Send a new category (for example Tech), or /skip to keep it.\n\n${CATEGORIES.join(", ")}` });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Send a new category (for example Tech), or type skip to keep it.\n\n${CATEGORIES.join(", ")}` });
       return;
     }
     try {
@@ -2026,7 +2026,7 @@ async function handleTelegramUpdate(update, env) {
       await saveTelegramSession(env, s);
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "🎥 Send a product video, or /skip for no video."
+        text: "🎥 Send a product video, or type skip for no video."
       });
       return;
     }
@@ -2035,7 +2035,7 @@ async function handleTelegramUpdate(update, env) {
       if ((s.data.images || []).length >= 5) {
         await telegramApi(env, "sendMessage", {
           chat_id: chatId,
-          text: "🖼️ You already have 5 images. Send /done."
+          text: "🖼️ You already have 5 images. Type done."
         });
         return;
       }
@@ -2050,7 +2050,7 @@ async function handleTelegramUpdate(update, env) {
 
         await telegramApi(env, "sendMessage", {
           chat_id: chatId,
-          text: `🖼️ Image ${s.data.images.length}/5 saved. Send another image or /done.`
+          text: `🖼️ Image ${s.data.images.length}/5 saved. Send another image or type done.`
         });
       } catch (error) {
         await telegramApi(env, "sendMessage", {
@@ -2066,7 +2066,7 @@ async function handleTelegramUpdate(update, env) {
 
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "🖼️ Send an image or /done."
+      text: "🖼️ Send an image or type done."
     });
     return;
   }
@@ -2084,7 +2084,7 @@ async function handleTelegramUpdate(update, env) {
           `📂 ${escapeTelegramHtml(s.data.category)}\n` +
           `🖼️ ${(s.data.images || []).length} image(s)\n` +
           `🎥 No video\n\n` +
-          `Send <code>/publish</code> or <code>/cancel</code>.`,
+          `Type <code>publish</code> or use <code>/cancel</code>.`,
         parse_mode: "HTML"
       });
       return;
@@ -2099,7 +2099,7 @@ async function handleTelegramUpdate(update, env) {
         await saveTelegramSession(env, s);
         await telegramApi(env, "sendMessage", {
           chat_id: chatId,
-          text: "🎥 Video saved. Send /publish or /cancel."
+          text: "🎥 Video saved. Type publish or use /cancel."
         });
       } catch (error) {
         await telegramApi(env, "sendMessage", {
@@ -2115,7 +2115,7 @@ async function handleTelegramUpdate(update, env) {
 
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "🎥 Send a video or /skip."
+      text: "🎥 Send a video or type skip."
     });
     return;
   }
