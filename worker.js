@@ -773,6 +773,11 @@ async function handleIntegrationProduct(request, env) {
   const adminRow = owner.email ? await env.DB.prepare("SELECT email FROM admin_allowlist WHERE email=? LIMIT 1").bind(clean(owner.email,320).toLowerCase()).first() : null;
   const promoter = await approvedPromoter(env, owner.id);
   if (!adminRow && !promoter) return json({ ok: false, error: "An approved promoter account is required" }, 403);
+  if (request.method === "GET") {
+    const rows = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.uploader_id=? ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 100`).bind(owner.id).all();
+    return json({ ok: true, products: (rows.results || []).map(productPublic) });
+  }
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON body" }, 400); }
   const title = clean(body.title, 300);
@@ -807,6 +812,53 @@ async function handleIntegrationProduct(request, env) {
   const result = await env.DB.prepare(`INSERT INTO products (title,description,affiliate_url,category,image1_url,image2_url,image3_url,image4_url,image5_url,video_url,published,featured,price,original_price,uploader_id,expires_at,listing_duration_hours) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?=1 THEN NULL ELSE datetime('now','+72 hours') END,?) RETURNING id`).bind(title,description,affiliateUrl,category,...images,videoUrl,1,0,price,originalPrice,owner.id,permanent?1:0,permanent?0:72).first();
   const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=?`).bind(result.id).first();
   return json({ ok: true, product: productPublic(product) }, 201);
+}
+
+
+async function handleIntegrationProductById(request, env, productId) {
+  const authorization = request.headers.get("Authorization") || "";
+  const match = authorization.match(/^Bearer (ss_live_[a-f0-9]{64})$/i);
+  if (!match) return json({ ok: false, error: "A valid API key is required in the Authorization: Bearer header" }, 401);
+  const digest = await hashApiKey(match[1]);
+  const owner = await env.DB.prepare("SELECT u.id,u.email FROM user_api_keys k JOIN users u ON u.id=k.user_id WHERE k.key_hash=? AND k.revoked_at IS NULL AND u.is_banned=0 LIMIT 1").bind(digest).first();
+  if (!owner) return json({ ok: false, error: "Invalid or revoked API key" }, 401);
+  const adminRow = owner.email ? await env.DB.prepare("SELECT email FROM admin_allowlist WHERE email=? LIMIT 1").bind(clean(owner.email,320).toLowerCase()).first() : null;
+  const promoter = await approvedPromoter(env, owner.id);
+  if (!adminRow && !promoter) return json({ ok: false, error: "An approved promoter account is required" }, 403);
+
+  const existing = await env.DB.prepare("SELECT * FROM products WHERE id=? AND uploader_id=? LIMIT 1").bind(productId, owner.id).first();
+  if (!existing) return json({ ok: false, error: "Product not found in your account" }, 404);
+
+  if (request.method === "DELETE") {
+    await env.DB.prepare("DELETE FROM products WHERE id=? AND uploader_id=?").bind(productId, owner.id).run();
+    return json({ ok: true, deleted: Number(productId) });
+  }
+  if (request.method !== "PUT" && request.method !== "PATCH") return json({ ok: false, error: "Method not allowed" }, 405);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON body" }, 400); }
+  const title = body.title === undefined ? existing.title : clean(body.title, 300);
+  const description = body.description === undefined ? existing.description : clean(body.description, 10000);
+  const rawAffiliate = body.affiliate_url ?? body.affiliate_link ?? body.product_url;
+  const affiliateUrl = rawAffiliate === undefined ? existing.affiliate_url : validHttpUrl(clean(rawAffiliate, 2000));
+  const category = body.category === undefined ? existing.category : clean(body.category, 100);
+  const videoUrl = body.video_url === undefined ? (existing.video_url || "") : validHttpUrl(clean(body.video_url, 2000));
+  const price = body.price === undefined ? existing.price : numberOrNull(body.price);
+  const originalPrice = body.original_price === undefined ? existing.original_price : numberOrNull(body.original_price);
+  if (!title) return json({ ok: false, error: "Title is required" }, 400);
+  if (!validCategory(category)) return json({ ok: false, error: "Invalid category" }, 400);
+  if (!affiliateUrl) return json({ ok: false, error: "A valid http or https affiliate_url is required" }, 400);
+  if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
+  const images = [];
+  for (let i = 1; i <= 5; i++) {
+    const value = body[`image${i}_url`];
+    images.push(value === undefined ? (existing[`image${i}_url`] || "") : (value ? validHttpUrl(clean(value, 3000)) : ""));
+    if (value && !images[i - 1]) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
+  }
+  await env.DB.prepare("UPDATE products SET title=?,description=?,affiliate_url=?,category=?,image1_url=?,image2_url=?,image3_url=?,image4_url=?,image5_url=?,video_url=?,price=?,original_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND uploader_id=?")
+    .bind(title, description, affiliateUrl, category, ...images, videoUrl || "", price, originalPrice, productId, owner.id).run();
+  const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=? AND p.uploader_id=?`).bind(productId, owner.id).first();
+  return json({ ok: true, product: productPublic(updated) });
 }
 
 async function handleCreateProduct(request, env) {
@@ -1525,7 +1577,9 @@ export default {
       const clickMatch = path.match(/^\/go\/product\/(\d+)$/);
       if (clickMatch && request.method === "GET") return handleTrackClick(request, env, clickMatch[1]);
       if (path === "/api/my/api-key" && ["GET", "POST", "DELETE"].includes(request.method)) return handleMyApiKey(request, env);
-      if (path === "/api/integrations/products" && request.method === "POST") return handleIntegrationProduct(request, env);
+      if (path === "/api/integrations/products" && ["GET", "POST"].includes(request.method)) return handleIntegrationProduct(request, env);
+      const integrationProductMatch = path.match(/^\\/api\\/integrations\\/products\\/(\\d+)$/);
+      if (integrationProductMatch && ["PUT", "PATCH", "DELETE"].includes(request.method)) return handleIntegrationProductById(request, env, Number(integrationProductMatch[1]));
       if (path === "/api/upload-media" && request.method === "POST") return handleUploadMedia(request, env);
       if (path === "/api/delete-media" && request.method === "POST") return handleDeleteMedia(request, env);
       if (path === "/api/products" && request.method === "GET") return handleProducts(request, env);
