@@ -1463,6 +1463,23 @@ async function handleTelegramUpdate(update, env) {
   }
 
   if (command === "start") {
+    try {
+      await telegramApi(env, "setMyCommands", {
+        commands: [
+          { command: "start", description: "Open the bot" },
+          { command: "help", description: "Show instructions" },
+          { command: "connect", description: "Connect your account" },
+          { command: "addproduct", description: "Upload a product" },
+          { command: "myproducts", description: "View your products" },
+          { command: "editproduct", description: "Edit your product" },
+          { command: "deleteproduct", description: "Delete your product" },
+          { command: "disconnect", description: "Disconnect your account" },
+          { command: "cancel", description: "Cancel the current action" }
+        ]
+      });
+    } catch (error) {
+      console.error("Could not refresh Telegram command menu", error);
+    }
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text:
