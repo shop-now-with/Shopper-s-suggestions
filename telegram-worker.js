@@ -1290,6 +1290,27 @@ async function handleTelegramCallback(update, env) {
     return;
   }
 
+  if (data === "adsrun:free" || data === "adsrun:paid") {
+    if (callback?.message?.chat?.type !== "private" || !promoterAccess) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Connect your promoter account in a private chat before choosing an ads plan." });
+      return;
+    }
+    if (data === "adsrun:free") {
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "🆓 <b>Free Plan setup</b>\n\nAdd the bot as an admin to 3 groups/channels where you have permission to manage promotions. Then use /adsverify inside each group to verify it.\n\nFree Plan details: one promotion every 60 minutes, 10 sends per product, then a 40-minute cooldown. Verification and weekly renewal will be enabled in the next setup step.",
+        parse_mode: "HTML"
+      });
+    } else {
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "⭐ <b>Paid Plan — ₹150/month</b>\n\nPayment and UTR submission will be connected after the payment QR is configured. Subscription activation requires admin approval and lasts 30 days.",
+        parse_mode: "HTML"
+      });
+    }
+    return;
+  }
+
   if (data.startsWith("cat:")) {
     const category = data.slice(4);
     if (!isValidCategory(category)) return;
