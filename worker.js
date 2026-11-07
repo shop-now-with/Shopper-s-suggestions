@@ -654,6 +654,12 @@ async function handleRaiseProduct(request, env, id) {
   if (!admin && Number(product.uploader_id) !== Number(user.id)) return json({ ok:false, error:"Only the listing owner or an administrator can raise this listing" }, 403);
   const hours = 72;
   if (!admin) {
+    const productIsActive = Number(product.published) === 1 &&
+      (!product.expires_at || String(product.expires_at) > new Date().toISOString().replace("T", " ").slice(0, 19));
+    if (!productIsActive) {
+      const blockedUntil = await getPromoterUploadCooldown(env, user.id);
+      if (blockedUntil) return promoterCooldownResponse(blockedUntil);
+    }
     const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND id<>?").bind(user.id,id).first();
     if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
