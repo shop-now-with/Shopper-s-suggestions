@@ -318,7 +318,9 @@ async function deleteTelegramPromoterProduct(env, chatId, telegramUserId, produc
     headers: { "Authorization": `Bearer ${apiKey}` }
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok || !result.ok) throw new Error(result.error || "Could not delete this product.");
+  if (!response.ok || !result.ok || Number(result.deleted) !== Number(productId)) {
+    throw new Error(result.error || ("The website did not confirm deletion (HTTP " + response.status + ")."));
+  }
   return result;
 }
 
@@ -1622,7 +1624,8 @@ async function handleTelegramUpdate(update, env) {
         });
         return;
       }
-      const id = Number.parseInt(args, 10);
+      const id = Number.parseInt(String(args).trim().replace(/^#/, ""), 10);
+      if (!Number.isSafeInteger(id) || id < 1) throw new Error("Use /deleteproduct followed by the product ID, for example /deleteproduct 123.");
       const product = products.find(p => Number(p.id) === id);
       if (!product) throw new Error("That product is not in your account. Use /myproducts to see your product IDs.");
       s.data = { deleteProductId: id };
