@@ -1646,7 +1646,8 @@ async function handleTelegramUpdate(update, env) {
           { command: "editproduct", description: "Edit your product" },
           { command: "deleteproduct", description: "Delete your product" },
           { command: "disconnect", description: "Disconnect your account" },
-          { command: "adsrun", description: "Set up product promotions" },\n          { command: "adsverify", description: "Verify this group for ads" },
+          { command: "adsrun", description: "Set up product promotions" },
+          { command: "adsverify", description: "Verify this group for ads" },
           { command: "myid", description: "Show your Telegram user ID" },
           { command: "cancel", description: "Cancel the current action" }
         ]
