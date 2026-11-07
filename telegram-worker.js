@@ -681,6 +681,7 @@ async function sendHelp(env, chatId) {
     `/deleteproduct — Delete one of your products\n` +
     `/disconnect — Disconnect your account\n` +
     `/adsrun — Set up product promotions 📢\n` +
+    `/adsverify — Verify this group for ads\n` +
     `/myid — Show your Telegram user ID 🆔\n` +
     `/cancel — Cancel the current action`;
   return telegramApi(env, "sendMessage", {
@@ -1743,7 +1744,7 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel"]);
+  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel","setadsqr","showadsqr","removeadsqr"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
