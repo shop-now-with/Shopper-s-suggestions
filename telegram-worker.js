@@ -230,20 +230,49 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
     title: cleanText(d.title, 300),
     description: cleanText(d.description, 10000),
     affiliate_url: cleanText(d.affiliate_url, 2000),
-    category: cleanText(d.category, 100),
-    video_url: cleanText(d.video_url, 2000)
+    category: cleanText(d.category, 100)
   };
   (Array.isArray(d.images) ? d.images : []).slice(0, 5).forEach((url, i) => body[`image${i + 1}_url`] = url);
-  const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
+
+  const endpoint = "https://shopperssuggestions.online/api/integrations/products";
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Cache-Control": "no-cache"
+    },
     body: JSON.stringify(body)
   });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || !result.ok || !result.product) throw new Error(result.error || "The website could not publish this product.");
-  const telegramResult = await postProductToTelegramGroups(result.product, env);
+  const responseText = await response.text();
+  let result = {};
+  try { result = responseText ? JSON.parse(responseText) : {}; } catch {}
+
+  let product = result.product || null;
+  if (response.ok && result.ok && !product) {
+    // Recover safely if the product was inserted but the response body was incomplete.
+    const check = await fetch(endpoint, {
+      headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json", "Cache-Control": "no-cache" }
+    });
+    const checkText = await check.text();
+    let checkData = {};
+    try { checkData = checkText ? JSON.parse(checkText) : {}; } catch {}
+    const rows = Array.isArray(checkData.products) ? checkData.products : [];
+    product = rows.find(p =>
+      String(p.title || "").trim() === body.title &&
+      String(p.affiliate_url || p.affiliate_link || "") === body.affiliate_url &&
+      (!p.created_at || Date.now() - Date.parse(String(p.created_at).replace(" ", "T") + "Z") < 5 * 60 * 1000)
+    ) || null;
+  }
+  if (!response.ok || !result.ok || !product) {
+    const detail = String(result.error || responseText || "The product endpoint returned no product record.").replace(/<[^>]*>/g, " ").slice(0, 700);
+    throw new Error(`Website publish failed (HTTP ${response.status}): ${detail}`);
+  }
+
+  const telegramResult = await postProductToTelegramGroups(product, env);
   await resetTelegramProductDraft(env, chatId);
-  return { product: result.product, telegramResult };
+  return { product, telegramResult };
 }
 
 
@@ -2304,11 +2333,18 @@ async function handleTelegramUpdate(update, env) {
 
   if (s.step === "images") {
     if (command === "skip" || command === "done") {
-      s.step = "video";
+      s.data.video_url = "";
+      s.step = "confirm";
       await saveTelegramSession(env, s);
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "🎥 Send a product video, or type skip for no video."
+        text:
+          `✅ <b>Ready to publish</b>\\n\\n` +
+          `🛍️ ${escapeTelegramHtml(s.data.title)}\\n` +
+          `📂 ${escapeTelegramHtml(s.data.category)}\\n` +
+          `🖼️ ${(s.data.images || []).length} image(s)\\n\\n` +
+          `Type <code>publish</code> or use <code>/cancel</code>.`,
+        parse_mode: "HTML"
       });
       return;
     }
@@ -2316,7 +2352,7 @@ async function handleTelegramUpdate(update, env) {
     if (message.photo?.length) {
       const currentImages = Array.isArray(s.data.images) ? s.data.images : [];
       if (currentImages.length >= 5) {
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You already have 5 images. Type done to continue to the video step." });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You already have 5 images. Type done to review and publish." });
         return;
       }
       try {
@@ -2326,7 +2362,7 @@ async function handleTelegramUpdate(update, env) {
         const uploaded = await githubUpload(env, file.bytes, file.filename, file.type);
         s.data.images = [...currentImages, uploaded.url];
         await saveTelegramSession(env, s);
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded and saved (" + s.data.images.length + "/5). Send another photo or direct image URL, or type done." });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded and saved (" + s.data.images.length + "/5). Send another photo or direct image URL, or type done to review." });
       } catch (error) {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Image upload failed: " + escapeTelegramHtml(error.message || "Please try another image."), parse_mode: "HTML" });
       }
@@ -2341,7 +2377,7 @@ async function handleTelegramUpdate(update, env) {
     } catch {
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "🖼️ Send a valid direct http(s) image URL, or type done to continue without images."
+        text: "🖼️ Send a valid direct http(s) image URL, or type done to review and publish."
       });
       return;
     }
@@ -2355,56 +2391,19 @@ async function handleTelegramUpdate(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "✅ Image link " + s.data.images.length + "/5 saved. Send another direct image URL or type done."
+      text: "✅ Image link " + s.data.images.length + "/5 saved. Send another direct image URL or type done to review."
     });
     return;
   }
 
+  // Older drafts may still be on the retired video step. Move them to confirmation without requesting video.
   if (s.step === "video") {
-    if (command === "skip") {
-      s.data.video_url = "";
-      s.step = "confirm";
-      await saveTelegramSession(env, s);
-      await telegramApi(env, "sendMessage", {
-        chat_id: chatId,
-        text:
-          `✅ <b>Ready to publish</b>\n\n` +
-          `🛍️ ${escapeTelegramHtml(s.data.title)}\n` +
-          `📂 ${escapeTelegramHtml(s.data.category)}\n` +
-          `🖼️ ${(s.data.images || []).length} image(s)\n` +
-          `🎥 No video\n\n` +
-          `Type <code>publish</code> or use <code>/cancel</code>.`,
-        parse_mode: "HTML"
-      });
-      return;
-    }
-
-    if (message.video?.file_id) {
-      try {
-        const file = await downloadTelegramFile(env, message.video.file_id, "video");
-        const uploaded = await githubUpload(env, file.bytes, file.filename, file.type);
-        s.data.video_url = uploaded.url;
-        s.step = "confirm";
-        await saveTelegramSession(env, s);
-        await telegramApi(env, "sendMessage", {
-          chat_id: chatId,
-          text: "🎥 Video saved. Type publish or use /cancel."
-        });
-      } catch (error) {
-        await telegramApi(env, "sendMessage", {
-          chat_id: chatId,
-          text:
-            `❌ Video upload failed.\n\n` +
-            `${escapeTelegramHtml(error.message || "Unknown error")}`,
-          parse_mode: "HTML"
-        });
-      }
-      return;
-    }
-
+    s.data.video_url = "";
+    s.step = "confirm";
+    await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "🎥 Send a video or type skip."
+      text: "Video uploads are no longer supported. Your product is ready without a video. Type publish to continue, or /cancel."
     });
     return;
   }
