@@ -2311,10 +2311,22 @@ async function handleTelegramUpdate(update, env) {
     }
 
     if (message.photo?.length) {
-      await telegramApi(env, "sendMessage", {
-        chat_id: chatId,
-        text: "🖼️ Please send a direct image URL instead of a Telegram photo. Example: https://example.com/product-image.jpg"
-      });
+      const currentImages = Array.isArray(s.data.images) ? s.data.images : [];
+      if (currentImages.length >= 5) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You already have 5 images. Type done to continue to the video step." });
+        return;
+      }
+      try {
+        const photo = message.photo[message.photo.length - 1];
+        const file = await downloadTelegramFile(env, photo.file_id, "image");
+        if (file.bytes.length > 15 * 1024 * 1024) throw new Error("That image is larger than 15 MB. Please send a smaller image.");
+        const uploaded = await githubUpload(env, file.bytes, file.filename, file.type);
+        s.data.images = [...currentImages, uploaded.url];
+        await saveTelegramSession(env, s);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded and saved (" + s.data.images.length + "/5). Send another photo or direct image URL, or type done." });
+      } catch (error) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Image upload failed: " + escapeTelegramHtml(error.message || "Please try another image."), parse_mode: "HTML" });
+      }
       return;
     }
 
@@ -2333,7 +2345,7 @@ async function handleTelegramUpdate(update, env) {
 
     s.data.images = Array.isArray(s.data.images) ? s.data.images : [];
     if (s.data.images.length >= 5) {
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🖼️ You already added 5 image links. Type done." });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🖼️ You already added 5 images. Type done." });
       return;
     }
     s.data.images.push(imageUrl);
