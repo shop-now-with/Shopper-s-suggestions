@@ -295,6 +295,7 @@ async function initializeSchema(env) {
   await executeSchema(env, USER_SCHEMA);
   await executeSchema(env, COMMUNITY_SCHEMA);
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_api_keys (user_id INTEGER PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, key_prefix TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS promoter_upload_cooldowns (user_id INTEGER PRIMARY KEY, blocked_until TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`).run();
   const rootEmail = clean(env.ROOT_ADMIN_EMAIL || "fayasm379@gmail.com", 320).toLowerCase();
   if (rootEmail.includes("@")) {
     await env.DB.prepare("INSERT OR IGNORE INTO admin_allowlist (email, is_root) VALUES (?, 1)").bind(rootEmail).run();
@@ -653,8 +654,8 @@ async function handleRaiseProduct(request, env, id) {
   if (!admin && Number(product.uploader_id) !== Number(user.id)) return json({ ok:false, error:"Only the listing owner or an administrator can raise this listing" }, 403);
   const hours = 72;
   if (!admin) {
-    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP AND id<>?").bind(user.id,id).first();
-    if (Number(active?.count||0)>=5) return json({ok:false,error:"You already have 5 live listings. Remove or wait for another listing to expire before bumping this one."},409);
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND id<>?").bind(user.id,id).first();
+    if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
   await env.DB.prepare("UPDATE products SET published=1, expires_at=datetime('now', ?), listing_duration_hours=?, raised_at=CURRENT_TIMESTAMP, expired_at=NULL, created_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(`+${hours} hours`, hours, id).run();
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=?`).bind(id).first();
@@ -740,6 +741,30 @@ async function hashApiKey(key) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
 }
+async function getPromoterUploadCooldown(env, userId) {
+  const row = await env.DB.prepare("SELECT blocked_until FROM promoter_upload_cooldowns WHERE user_id=? AND blocked_until>CURRENT_TIMESTAMP LIMIT 1").bind(userId).first();
+  return row?.blocked_until || null;
+}
+
+function promoterCooldownResponse(blockedUntil) {
+  return json({
+    ok: false,
+    error: `You recently removed an active product. You can upload another after ${blockedUntil} UTC.`,
+    cooldown_until: blockedUntil
+  }, 429);
+}
+
+async function applyPromoterRemovalCooldown(env, userId, product) {
+  const isActive = Number(product?.published) === 1 &&
+    (!product?.expires_at || String(product.expires_at) > new Date().toISOString().replace("T", " ").slice(0, 19));
+  if (!isActive) return;
+  const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(userId).first();
+  if (Number(active?.count || 0) !== 4) return;
+  await env.DB.prepare(`INSERT INTO promoter_upload_cooldowns (user_id, blocked_until, updated_at)
+    VALUES (?, datetime('now','+3 days'), CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id) DO UPDATE SET blocked_until=excluded.blocked_until, updated_at=CURRENT_TIMESTAMP`).bind(userId).run();
+}
+
 async function handleMyApiKey(request, env) {
   const user = await currentUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
@@ -800,8 +825,10 @@ async function handleIntegrationProduct(request, env) {
   if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
   const isAdmin = !!adminRow;
   if (!isAdmin) {
-    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP").bind(owner.id).first();
-    if (Number(active?.count||0)>=5) return json({ok:false,error:"You already have 5 live listings. Wait for one to expire or remove one before uploading another."},409);
+    const blockedUntil = await getPromoterUploadCooldown(env, owner.id);
+    if (blockedUntil) return promoterCooldownResponse(blockedUntil);
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(owner.id).first();
+    if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
   const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
   if (!isAdmin && mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix))) {
@@ -830,6 +857,7 @@ async function handleIntegrationProductById(request, env, productId) {
   if (!existing) return json({ ok: false, error: "Product not found in your account" }, 404);
 
   if (request.method === "DELETE") {
+    if (!adminRow) await applyPromoterRemovalCooldown(env, owner.id, existing);
     const mediaUrls = [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean);
     for (const mediaUrl of mediaUrls) {
       try {
@@ -899,8 +927,10 @@ async function handleCreateProduct(request, env) {
   const durationHours = 72;
   const uploaderId = admin ? numberOrNull(body.uploader_id ?? body.user_id) : Number(user.id);
   if (!admin) {
-    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND expires_at>CURRENT_TIMESTAMP").bind(user.id).first();
-    if (Number(active?.count||0)>=5) return json({ok:false,error:"You already have 5 live listings. Wait for one to expire or remove one before uploading another."},409);
+    const blockedUntil = await getPromoterUploadCooldown(env, user.id);
+    if (blockedUntil) return promoterCooldownResponse(blockedUntil);
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(user.id).first();
+    if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
   const permanent = !!admin && isTrue(body.permanent);
   const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
@@ -953,6 +983,15 @@ async function handleUpdateProduct(request, env, id) {
   const published = body.published === undefined ? Number(existing.published) : (isTrue(body.published) ? 1 : 0);
   const featured = body.featured === undefined ? Number(existing.featured) : (isTrue(body.featured) ? 1 : 0);
   const expiresAt = admin && isTrue(body.permanent) ? null : existing.expires_at;
+  if (!admin && Number(existing.published) !== 1 && published === 1) {
+    const blockedUntil = await getPromoterUploadCooldown(env, user.id);
+    if (blockedUntil) return promoterCooldownResponse(blockedUntil);
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND id<>?").bind(user.id,id).first();
+    if (Number(active?.count || 0) >= 4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
+  }
+  if (!admin && Number(existing.published) === 1 && published === 0) {
+    await applyPromoterRemovalCooldown(env, user.id, existing);
+  }
   await env.DB.prepare(`UPDATE products SET title=?, description=?, affiliate_url=?, category=?, image1_url=?, image2_url=?, image3_url=?, image4_url=?, image5_url=?, video_url=?, published=?, featured=?, price=?, original_price=?, uploader_id=?, expires_at=?, listing_duration_hours=CASE WHEN ? IS NULL THEN 0 ELSE listing_duration_hours END, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .bind(title, description, affiliateUrl, category, ...images, videoUrl, published, featured, price, originalPrice, uploaderId ?? null, expiresAt, expiresAt, id).run();
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).bind(id).first();
@@ -964,6 +1003,7 @@ async function handleDeleteProduct(request, env, id) {
   const product = await env.DB.prepare("SELECT * FROM products WHERE id = ? LIMIT 1").bind(id).first();
   if (!product) return json({ ok: false, error: "Product not found" }, 404);
   if (!admin && Number(product.uploader_id)!==Number(user?.id)) return json({ok:false,error:"Only the listing owner or an administrator can delete this product"},403);
+  if (!admin) await applyPromoterRemovalCooldown(env, user.id, product);
   const mediaUrls = [product.image1_url, product.image2_url, product.image3_url, product.image4_url, product.image5_url].filter(Boolean);
   for (const mediaUrl of mediaUrls) {
     try {
