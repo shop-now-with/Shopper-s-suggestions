@@ -247,7 +247,7 @@ async function getTelegramConnectedProfile(env, chatId, telegramUserId) {
 async function sendTelegramConnectedProfile(env, chatId, telegramUserId) {
   const p = await getTelegramConnectedProfile(env, chatId, telegramUserId);
   const display = p.display_name || p.promoter_name || p.username || p.promoter_username || "Shopper's Suggestions user";
-  const profileUrl = SITE_URL + "/profile.html?id=" + encodeURIComponent(p.id);
+  const profileUrl = SITE_URL + "/profile.html?user=" + encodeURIComponent(p.id);
   const body = "👤 <b>" + escapeTelegramHtml(display) + "</b>\n" +
     (p.username ? "🔖 @" + escapeTelegramHtml(p.username) + "\n" : "") +
     "🏷️ <b>Promoter:</b> " + (p.promoter_status === "approved" ? "✅ Approved" : escapeTelegramHtml(p.promoter_status || "Not active")) + "\n" +
@@ -259,6 +259,14 @@ async function sendTelegramConnectedProfile(env, chatId, telegramUserId) {
   const markup = { inline_keyboard: [[{ text: "🌐 View profile", url: profileUrl }]] };
   if (p.avatar_url) await telegramApi(env, "sendPhoto", { chat_id: chatId, photo: p.avatar_url, caption: body, parse_mode: "HTML", reply_markup: markup });
   else await telegramApi(env, "sendMessage", { chat_id: chatId, text: body, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+  const ownProducts = await getTelegramPromoterProducts(env, chatId, telegramUserId);
+  const liveProducts = ownProducts.filter(product => Number(product.published) === 1).slice(0, 5);
+  if (liveProducts.length) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🛍️ <b>Your live products</b>", parse_mode: "HTML" });
+    for (const product of liveProducts) await sendProductToChat(env, chatId, product);
+  } else {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🛍️ You don't have any live products yet. Use /addproduct to publish one." });
+  }
 }
 async function getTelegramPromoterProducts(env, chatId, telegramUserId) {
   const link = await getPromoterTelegramLink(env, telegramUserId);
