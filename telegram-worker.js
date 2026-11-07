@@ -503,7 +503,8 @@ async function sendHelp(env, chatId, admin = false) {
     `/request your idea\n\n` +
     `🆔 /getid\n` +
     `👤 /myid\n\n` +
-    `You can also type a product name without a command.`;
+    `You can also type a product name without a command.\\n\\n` +
+    `👤 Promoters: /connect, /upload, /disconnect`;
 
   if (admin) {
     text +=
@@ -1135,8 +1136,11 @@ async function handleTelegramCallback(update, env) {
 
   await telegramApi(env, "answerCallbackQuery", { callback_query_id: callback.id });
   const s = await getTelegramSession(env, chatId, userId);
-  if (!s.unlocked || !isOwnerAdmin(env, callback?.message?.chat, userId)) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Admin access required." });
+  const promoterLink = await getPromoterTelegramLink(env, userId);
+  const promoterAccess = callback?.message?.chat?.type === "private" && promoterLink && String(promoterLink.chat_id) === String(chatId);
+  const adminAccess = s.unlocked && isOwnerAdmin(env, callback?.message?.chat, userId);
+  if (!adminAccess && !promoterAccess) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Connect an approved promoter account first with /connect." });
     return;
   }
 
@@ -1183,6 +1187,71 @@ async function handleTelegramUpdate(update, env) {
   // bot command unless the post actually contains a command.
   const isChannelPost = chat?.type === "channel";
   if (isChannelPost && !text.trim().startsWith("/")) return;
+
+  if (command === "connect") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "For account security, connect your API key in a private chat with this bot." });
+      return;
+    }
+    s.step = "connect_api_key";
+    s.data = {};
+    await saveTelegramSession(env, s);
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔐 Send your Shopper's Suggestions Promoter API key in your next message. It will be verified and stored encrypted. Never send your key in a group." });
+    return;
+  }
+
+  if (s.step === "connect_api_key" && text && !text.startsWith("/")) {
+    if (chat?.type !== "private" || !user?.id || !/^ss_live_[a-f0-9]{64}$/i.test(text)) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ That doesn't look like a valid API key. Send the key again, or /cancel." });
+      return;
+    }
+    try { await telegramApi(env, "deleteMessage", { chat_id: chatId, message_id: message.message_id }); } catch {}
+    try {
+      if (!await verifyPromoterApiKey(text)) {
+        s.step = "idle";
+        await saveTelegramSession(env, s);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ API key rejected. Check that it is active and belongs to an approved promoter account, then try /connect again." });
+        return;
+      }
+      await connectPromoterTelegram(env, chatId, user.id, text);
+      s.step = "idle";
+      s.data = {};
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Your promoter account is connected securely. Use /upload to add a product. Disconnect anytime with /disconnect." });
+    } catch (error) {
+      s.step = "idle";
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `⚠️ Could not connect: ${escapeTelegramHtml(error.message || "Unknown error")}`, parse_mode: "HTML" });
+    }
+    return;
+  }
+
+  if (command === "disconnect") {
+    if (chat?.type !== "private" || !user?.id) return;
+    await env.DB.prepare("DELETE FROM telegram_promoter_links WHERE telegram_user_id=?").bind(String(user.id)).run();
+    s.step = "idle";
+    s.data = {};
+    await saveTelegramSession(env, s);
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔌 Your promoter account has been disconnected." });
+    return;
+  }
+
+  if (command === "upload") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /upload in a private chat with the official bot." });
+      return;
+    }
+    const link = await getPromoterTelegramLink(env, user.id);
+    if (!link || String(link.chat_id) !== String(chatId)) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Connect your promoter account first using /connect." });
+      return;
+    }
+    s.step = "title";
+    s.data = { mode: "promoter", images: [] };
+    await saveTelegramSession(env, s);
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🛍️ Let's add a product. Send its title." });
+    return;
+  }
 
   if (command === "start") {
     await telegramApi(env, "sendMessage", {
@@ -1609,10 +1678,7 @@ async function handleTelegramUpdate(update, env) {
 
   if (command === "cancel") {
     await resetTelegramProductDraft(env, chatId);
-    await telegramApi(env, "sendMessage", {
-      chat_id: chatId,
-      text: "🗑️ Product draft cancelled. Admin remains unlocked."
-    });
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🗑️ Current action cancelled." });
     return;
   }
 
@@ -1765,7 +1831,9 @@ async function handleTelegramUpdate(update, env) {
 
   if (s.step === "confirm" && command === "publish") {
     try {
-      const created = await createProductFromTelegramSession(env, chatId);
+      const created = s.data?.mode === "promoter"
+        ? await createPromoterProductFromTelegramSession(env, chatId, userId)
+        : await createProductFromTelegramSession(env, chatId);
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
