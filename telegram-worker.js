@@ -231,6 +231,46 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
   return { product: result.product, telegramResult };
 }
 
+
+async function getTelegramPromoterProducts(env, chatId, telegramUserId) {
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your promoter account first using /connect.");
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
+    headers: { "Authorization": `Bearer ${apiKey}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) throw new Error(result.error || "Could not load your products.");
+  return result.products || [];
+}
+
+async function updateTelegramPromoterProduct(env, chatId, telegramUserId, productId, changes) {
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your promoter account first using /connect.");
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const response = await fetch(`https://shopperssuggestions.online/api/integrations/products/${encodeURIComponent(productId)}`, {
+    method: "PUT",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(changes)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) throw new Error(result.error || "Could not update this product.");
+  return result.product;
+}
+
+async function deleteTelegramPromoterProduct(env, chatId, telegramUserId, productId) {
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your promoter account first using /connect.");
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const response = await fetch(`https://shopperssuggestions.online/api/integrations/products/${encodeURIComponent(productId)}`, {
+    method: "DELETE",
+    headers: { "Authorization": `Bearer ${apiKey}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) throw new Error(result.error || "Could not delete this product.");
+  return result;
+}
+
 async function parseBody(request) {
   const type = request.headers.get("Content-Type") || "";
   if (type.includes("multipart/form-data")) {
@@ -580,41 +620,19 @@ function isOwnerAdmin(env, chat, userId) {
   );
 }
 
-async function sendHelp(env, chatId, admin = false) {
-  let text =
+async function sendHelp(env, chatId) {
+  const text =
     `🛍️ <b>Shopper's Suggestions</b>\n\n` +
-    `✨ Find products straight from Telegram.\n\n` +
-    `🔎 <b>Search</b>\n` +
-    `/search product name\n` +
-    `/product 123\n` +
-    `/link 123\n\n` +
-    `📂 <b>Categories</b>\n` +
-    `/categories\n` +
-    `/category Tech\n\n` +
-    `🔥 <b>Discover</b>\n` +
-    `/latest\n` +
-    `/featured\n\n` +
-    `💬 <b>Contact</b>\n` +
-    `/feedback your message\n` +
-    `/request your idea\n\n` +
-    `🆔 /getid\n` +
-    `👤 /myid\n\n` +
-    `You can also type a product name without a command.\n\n` +
-    `👤 Promoters: /connect, /upload, /disconnect`;
-
-  if (admin) {
-    text +=
-      `\n\n🔐 <b>Admin tools</b>\n` +
-      `/addproduct\n` +
-      `/broadcast message\n` +
-      `/sendto CHAT_ID message\n` +
-      `/channel CHAT_ID message\n` +
-      `/chats\n` +
-      `/refreshchat CHAT_ID\n` +
-      `/stats\n` +
-      `/lock`;
-  }
-
+    `Connect your promoter account to manage your products directly from Telegram.\n\n` +
+    `/start — Open the bot\n` +
+    `/help — Show instructions\n` +
+    `/connect — Connect your account\n` +
+    `/addproduct — Upload a product\n` +
+    `/myproducts — View your products\n` +
+    `/editproduct — Edit one of your products\n` +
+    `/deleteproduct — Delete one of your products\n` +
+    `/disconnect — Disconnect your account\n` +
+    `/cancel — Cancel the current action`;
   return telegramApi(env, "sendMessage", {
     chat_id: chatId,
     text,
@@ -1284,6 +1302,15 @@ async function handleTelegramUpdate(update, env) {
   const isChannelPost = chat?.type === "channel";
   if (isChannelPost && !text.trim().startsWith("/")) return;
 
+  if (command === "cancel") {
+    await resetTelegramProductDraft(env, chatId);
+    s.step = "idle";
+    s.data = {};
+    await saveTelegramSession(env, s);
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Current action cancelled." });
+    return;
+  }
+
   if (command === "connect") {
     if (chat?.type !== "private" || !user?.id) {
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: "For account security, connect your API key in a private chat with this bot." });
@@ -1313,11 +1340,97 @@ async function handleTelegramUpdate(update, env) {
       s.step = "idle";
       s.data = {};
       await saveTelegramSession(env, s);
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Your promoter account is connected securely. Use /upload to add a product. Disconnect anytime with /disconnect." });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Your promoter account is connected securely. Use /addproduct to add a product. Disconnect anytime with /disconnect." });
     } catch (error) {
       s.step = "idle";
       await saveTelegramSession(env, s);
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: `⚠️ Could not connect: ${escapeTelegramHtml(error.message || "Unknown error")}`, parse_mode: "HTML" });
+    }
+    return;
+  }
+
+
+  if (command === "myproducts") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /myproducts in a private chat with the bot." });
+      return;
+    }
+    try {
+      const products = await getTelegramPromoterProducts(env, chatId, user.id);
+      if (!products.length) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You haven't uploaded any products yet. Use /addproduct to publish your first one." });
+        return;
+      }
+      const lines = products.slice(0, 30).map(p => {
+        const status = p.published ? "Live" : "Not live";
+        return `#${p.id} — ${escapeTelegramHtml(p.title)}\n${escapeTelegramHtml(p.category)} · ${status}`;
+      });
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: `🛍️ <b>Your products (${products.length})</b>\n\n` + lines.join("\n\n") + `\n\nUse /editproduct ID or /deleteproduct ID.`,
+        parse_mode: "HTML",
+        disable_web_page_preview: true
+      });
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `❌ ${escapeTelegramHtml(error.message || "Could not load products.")}`, parse_mode: "HTML" });
+    }
+    return;
+  }
+
+  if (command === "editproduct") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /editproduct in a private chat with the bot." });
+      return;
+    }
+    try {
+      const products = await getTelegramPromoterProducts(env, chatId, user.id);
+      if (!args) {
+        const lines = products.map(p => `#${p.id} — ${escapeTelegramHtml(p.title)}`);
+        await telegramApi(env, "sendMessage", {
+          chat_id: chatId,
+          text: lines.length ? `Send /editproduct ID for the product you want to edit:\n\n${lines.slice(0,30).join("\n")}` : "You have no products to edit.",
+          parse_mode: "HTML"
+        });
+        return;
+      }
+      const id = Number.parseInt(args, 10);
+      const product = products.find(p => Number(p.id) === id);
+      if (!product) throw new Error("That product is not in your account. Use /myproducts to see your product IDs.");
+      s.data = { editProductId: id, editChanges: {} };
+      s.step = "edit_title";
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Editing #${id}. Send a new title, or /skip to keep the current title:\n\n${cleanText(product.title, 250)}` });
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `❌ ${escapeTelegramHtml(error.message || "Could not start editing.")}`, parse_mode: "HTML" });
+    }
+    return;
+  }
+
+  if (command === "deleteproduct") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /deleteproduct in a private chat with the bot." });
+      return;
+    }
+    try {
+      const products = await getTelegramPromoterProducts(env, chatId, user.id);
+      if (!args) {
+        const lines = products.map(p => `#${p.id} — ${escapeTelegramHtml(p.title)}`);
+        await telegramApi(env, "sendMessage", {
+          chat_id: chatId,
+          text: lines.length ? `Send /deleteproduct ID to choose a product:\n\n${lines.slice(0,30).join("\n")}` : "You have no products to delete.",
+          parse_mode: "HTML"
+        });
+        return;
+      }
+      const id = Number.parseInt(args, 10);
+      const product = products.find(p => Number(p.id) === id);
+      if (!product) throw new Error("That product is not in your account. Use /myproducts to see your product IDs.");
+      s.data = { deleteProductId: id };
+      s.step = "delete_confirm";
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Delete “${cleanText(product.title, 200)}” (#${id})? Reply YES to confirm, or /cancel to keep it.` });
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `❌ ${escapeTelegramHtml(error.message || "Could not start deletion.")}`, parse_mode: "HTML" });
     }
     return;
   }
@@ -1332,7 +1445,7 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  if (command === "upload") {
+  if (command === "addproduct") {
     if (chat?.type !== "private" || !user?.id) {
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Use /upload in a private chat with the official bot." });
       return;
@@ -1354,17 +1467,21 @@ async function handleTelegramUpdate(update, env) {
       chat_id: chatId,
       text:
         `👋 <b>Welcome to Shopper's Suggestions!</b>\n\n` +
-        `🔎 Search products, explore categories and discover featured picks.\n\n` +
-        `Try <code>/search wireless earbuds</code> or <code>/category Tech</code>.\n\n` +
-        `Promoters: /connect to link your account, then /upload to add products.\n\n` +
-        `Use /help for all commands.`,
+        `Connect your promoter account with /connect, then manage your listings using /addproduct, /myproducts, /editproduct and /deleteproduct.\n\n` +
+        `Use /help to see the available commands.`,
       parse_mode: "HTML"
     });
     return;
   }
 
-  if (command === "help" || command === "menu") {
-    await sendHelp(env, chatId, isOwnerAdmin(env, chat, userId) && Boolean(s.unlocked));
+  if (command === "help") {
+    await sendHelp(env, chatId);
+    return;
+  }
+
+  const allowedCommands = new Set(["start","help","connect","addproduct","myproducts","editproduct","deleteproduct","disconnect","cancel","skip","done","publish"]);
+  if (text.startsWith("/") && !allowedCommands.has(command)) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
   }
 
@@ -1768,14 +1885,74 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  if (command === "addproduct") {
-    await promptAddProduct(env, chatId);
+
+  if (s.step === "delete_confirm") {
+    const id = Number(s.data?.deleteProductId);
+    if (text.trim().toUpperCase() !== "YES") {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Deletion not confirmed. Reply YES to delete, or /cancel." });
+      return;
+    }
+    try {
+      const result = await deleteTelegramPromoterProduct(env, chatId, userId, id);
+      s.step = "idle"; s.data = {};
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `🗑️ Product #${result.deleted} deleted from your account.` });
+    } catch (error) {
+      s.step = "idle"; s.data = {};
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `❌ ${escapeTelegramHtml(error.message || "Could not delete product.")}`, parse_mode: "HTML" });
+    }
     return;
   }
 
-  if (command === "cancel") {
-    await resetTelegramProductDraft(env, chatId);
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🗑️ Current action cancelled." });
+  if (["edit_title","edit_description","edit_link","edit_category"].includes(s.step)) {
+    const key = s.step;
+    const changes = s.data.editChanges || {};
+    if (command !== "skip") {
+      if (key === "edit_title") changes.title = cleanText(text, 300);
+      if (key === "edit_description") changes.description = cleanText(text, 10000);
+      if (key === "edit_link") {
+        try { const u = new URL(text); if (!/^https?:$/.test(u.protocol)) throw new Error(); }
+        catch { await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send a valid http(s) affiliate link, or /skip." }); return; }
+        changes.affiliate_url = text;
+      }
+      if (key === "edit_category") {
+        if (!isValidCategory(text.trim())) {
+          await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That category isn't valid. Send one of the available categories, or /skip." });
+          return;
+        }
+        changes.category = text.trim();
+      }
+    }
+    s.data.editChanges = changes;
+    if (key === "edit_title") {
+      s.step = "edit_description";
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send the new description, or /skip to keep it." });
+      return;
+    }
+    if (key === "edit_description") {
+      s.step = "edit_link";
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Send the new affiliate link, or /skip to keep it." });
+      return;
+    }
+    if (key === "edit_link") {
+      s.step = "edit_category";
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `Send a new category (for example Tech), or /skip to keep it.\n\n${CATEGORIES.join(", ")}` });
+      return;
+    }
+    try {
+      const updated = await updateTelegramPromoterProduct(env, chatId, userId, s.data.editProductId, changes);
+      s.step = "idle"; s.data = {};
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `✅ Product #${updated.id} updated successfully.` });
+    } catch (error) {
+      s.step = "idle"; s.data = {};
+      await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: `❌ ${escapeTelegramHtml(error.message || "Could not update product.")}`, parse_mode: "HTML" });
+    }
     return;
   }
 
@@ -1997,6 +2174,19 @@ async function setupTelegramWebhook(request, env) {
   };
   if (cleanText(env.TELEGRAM_WEBHOOK_SECRET)) payload.secret_token = cleanText(env.TELEGRAM_WEBHOOK_SECRET);
   const result = await telegramApi(env, "setWebhook", payload);
+  await telegramApi(env, "setMyCommands", {
+    commands: [
+      { command: "start", description: "Open the bot" },
+      { command: "help", description: "Show instructions" },
+      { command: "connect", description: "Connect your account" },
+      { command: "addproduct", description: "Upload a product" },
+      { command: "myproducts", description: "View your products" },
+      { command: "editproduct", description: "Edit your product" },
+      { command: "deleteproduct", description: "Delete your product" },
+      { command: "disconnect", description: "Disconnect your account" },
+      { command: "cancel", description: "Cancel the current action" }
+    ]
+  });
   return json({ ok: true, telegram: result.ok, webhook: publicWebhook });
 }
 
