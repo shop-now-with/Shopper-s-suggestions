@@ -1310,20 +1310,38 @@ async function handleTelegramCallback(update, env) {
 
   if (data === "adsrun:free" || data === "adsrun:paid") {
     if (callback?.message?.chat?.type !== "private" || !promoterAccess) {
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Connect your promoter account in a private chat before choosing an ads plan." });
+      await telegramApi(env, "sendMessage", {chat_id:chatId,text:"🔒 Connect your promoter account in a private chat before choosing a plan."});
       return;
     }
-    await ensureAdsAccount(env, userId);
+    await ensureAdsAccount(env,userId);
     if (data === "adsrun:free") {
-      await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free',paid_until=NULL,updated_at=? WHERE telegram_user_id=?").bind(nowSql(), String(userId)).run();
-      const groups = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(String(userId)).first();
-      await telegramApi(env, "sendMessage", {
-        chat_id: chatId,
-        text: "🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups/supergroups where you are an admin and this bot can post. Use /adsverify inside each group.\\n\\n📣 Promotions: every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 20 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: " + Number(groups?.total || 0) + ".",
-        parse_mode: "HTML"
-      });
+      await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free',paid_until=NULL,updated_at=? WHERE telegram_user_id=?").bind(nowSql(),String(userId)).run();
+      const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(String(userId)).first();
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups/supergroups where you are an admin and this bot can post. Use /adsverify inside each group.\\n\\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 20 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
     } else {
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⭐ Paid Plan payment setup is being prepared. Please try again shortly." });
+      const qr=await getAdsQr(env);
+      if(!qr){await telegramApi(env,"sendMessage",{chat_id:chatId,text:"⭐ Paid Plan QR is not configured yet. Please try again later."});return;}
+      const session=await getTelegramSession(env,chatId,userId);
+      session.step="ads_payment_utr";session.data={};
+      await saveTelegramSession(env,session);
+      await telegramApi(env,"sendPhoto",{chat_id:chatId,photo:qr,caption:"⭐ <b>Paid Plan — ₹150 / 30 days</b>\\n\\nScan this QR to pay. After payment, send your UTR/reference number here. Your subscription starts only after admin approval.",parse_mode:"HTML"});
+    }
+    return;
+  }
+
+  if (data.startsWith("adsapprove:") || data.startsWith("adsreject:")) {
+    if (!adminAccess || !isOwnerAdmin(env,callback?.message?.chat,userId)) {
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🔒 Only the authenticated bot owner can review payment requests."});
+      return;
+    }
+    const approve=data.startsWith("adsapprove:");
+    const id=data.split(":")[1];
+    try {
+      const result=await reviewAdsPayment(env,id,userId,approve);
+      await telegramApi(env,"editMessageReplyMarkup",{chat_id:chatId,message_id:callback.message.message_id,reply_markup:{inline_keyboard:[]}});
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:approve?"✅ Payment approved. Paid plan active until "+result.until+".":"❌ Payment request rejected."});
+    } catch(error) {
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"⚠️ "+escapeTelegramHtml(error.message||"Could not review payment.")});
     }
     return;
   }
@@ -1474,6 +1492,11 @@ async function handleTelegramUpdate(update, env) {
 
   if (command === "adsverify") {
     await verifyAdsGroup(env, message);
+    return;
+  }
+
+  if (s.step === "ads_payment_utr" && chat?.type === "private" && user?.id && text && !text.startsWith("/")) {
+    await handleAdsPaymentUtr(env, s, chatId, userId, text);
     return;
   }
 
@@ -1710,7 +1733,7 @@ async function handleTelegramUpdate(update, env) {
     }
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "📢 <b>Shopper's Suggestions Ads</b>\n\nChoose a promotion plan:\n\n🆓 <b>Free Plan</b> — Verify 3 groups/channels. Ads every 60 minutes.\n\n⭐ <b>Paid Plan</b> — ₹150/month. Ads every 30 minutes.\n\nChoose below to continue.",
+      text: "📢 <b>Shopper's Suggestions Ads</b>\n\nChoose a promotion plan:\n\n🆓 <b>Free Plan</b> — 3 groups initially, then 3 more every 20 days; all groups stay active. Ads every 60 minutes.\n\n⭐ <b>Paid Plan</b> — ₹150 / 30 days, activated after admin approval. Ads every 30 minutes.\n\nChoose below to continue.",
       parse_mode: "HTML",
       reply_markup: { inline_keyboard: [[
         { text: "🆓 Free Plan", callback_data: "adsrun:free" },
@@ -1899,6 +1922,16 @@ async function handleTelegramUpdate(update, env) {
   }
 
   // Admin authentication is intentionally limited to the owner's private chat.
+  if (s.step === "ads_qr_upload" && s.unlocked && isOwnerAdmin(env,chat,userId)) {
+    const photos=message.photo||[];
+    const photo=photos.length?photos[photos.length-1]:null;
+    if(!photo?.file_id){await telegramApi(env,"sendMessage",{chat_id:chatId,text:"Send the payment QR as a photo, or /cancel."});return;}
+    await env.DB.prepare("INSERT INTO telegram_ads_settings (setting_key,setting_value,updated_at) VALUES ('payment_qr',?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_at=excluded.updated_at").bind(photo.file_id,nowSql()).run();
+    s.step="idle";s.data={};await saveTelegramSession(env,s);
+    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"✅ Paid Ads QR saved. Promoters can now choose Paid Plan in /adsrun."});
+    return;
+  }
+
   if (command === "admin") {
     if (!isOwnerAdmin(env, chat, userId)) {
       await telegramApi(env, "sendMessage", {
@@ -1990,6 +2023,23 @@ async function handleTelegramUpdate(update, env) {
         text: `🔐 This command requires admin access. Use /admin in your private bot chat.`
       });
     }
+    return;
+  }
+
+  if (command === "setadsqr") {
+    s.step="ads_qr_upload";s.data={};await saveTelegramSession(env,s);
+    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"📷 Send the payment QR image now. It will be used for the ₹150 / 30-day Paid Ads Plan."});
+    return;
+  }
+  if (command === "showadsqr") {
+    const qr=await getAdsQr(env);
+    if(!qr) await telegramApi(env,"sendMessage",{chat_id:chatId,text:"No payment QR configured. Use /setadsqr."});
+    else await telegramApi(env,"sendPhoto",{chat_id:chatId,photo:qr,caption:"Current Paid Ads payment QR."});
+    return;
+  }
+  if (command === "removeadsqr") {
+    await env.DB.prepare("DELETE FROM telegram_ads_settings WHERE setting_key='payment_qr'").run();
+    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"✅ Paid Ads QR removed."});
     return;
   }
 
@@ -2368,7 +2418,7 @@ async function handleTelegramUpdate(update, env) {
 
 
 function adsSqlAfterMinutes(minutes) {
-  return new Date(Date.now() + Number(minutes) * 60000).toISOString().replace("T", " ").replace(/\\.\\d{3}Z$/, "");
+  return new Date(Date.now() + Number(minutes) * 60000).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
 }
 function adsSqlAfterDays(days) { return adsSqlAfterMinutes(Number(days) * 1440); }
 async function ensureAdsAccount(env, userId) {
@@ -2376,6 +2426,62 @@ async function ensureAdsAccount(env, userId) {
     .bind(String(userId), nowSql(), nowSql()).run();
   return env.DB.prepare("SELECT * FROM telegram_ads_accounts WHERE telegram_user_id=? LIMIT 1").bind(String(userId)).first();
 }
+
+async function getAdsQr(env) {
+  const row = await env.DB.prepare("SELECT setting_value FROM telegram_ads_settings WHERE setting_key='payment_qr' LIMIT 1").first();
+  return row?.setting_value || "";
+}
+async function submitAdsUtr(env, chatId, userId, utr) {
+  const value = cleanText(utr, 40).replace(/\\s+/g, "").toUpperCase();
+  if (!/^[A-Z0-9]{6,30}$/.test(value)) throw new Error("Send a valid UTR/reference number (6–30 letters or numbers).");
+  const result = await env.DB.prepare("INSERT INTO telegram_ads_payments (telegram_user_id,chat_id,utr,status,created_at) VALUES (?,?,?,'pending',?)")
+    .bind(String(userId), String(chatId), value, nowSql()).run();
+  const id = result.meta?.last_row_id;
+  const owner = cleanText(env.TELEGRAM_FEEDBACK_CHAT_ID || DEFAULT_FEEDBACK_CHAT_ID, 100);
+  const chat = await telegramApi(env, "getChat", { chat_id: chatId }).catch(() => ({result:{}}));
+  await telegramApi(env, "sendMessage", {
+    chat_id: owner,
+    text: "💳 <b>New Paid Ads payment request</b>\\n\\n👤 " + escapeTelegramHtml(chat.result?.first_name || chat.result?.username || "Promoter") +
+      "\\n🆔 <code>" + escapeHtml(userId) + "</code>\\n🔢 UTR: <code>" + escapeHtml(value) + "</code>\\n📦 Request: #" + id + "\\n💰 ₹150 / 30 days",
+    parse_mode: "HTML",
+    reply_markup: {inline_keyboard:[[
+      {text:"✅ Approve 30 days",callback_data:"adsapprove:"+id},
+      {text:"❌ Reject",callback_data:"adsreject:"+id}
+    ]]}
+  });
+  return id;
+}
+async function reviewAdsPayment(env, id, reviewer, approve) {
+  const payment = await env.DB.prepare("SELECT * FROM telegram_ads_payments WHERE id=? LIMIT 1").bind(Number(id)).first();
+  if (!payment) throw new Error("Payment request not found.");
+  if (payment.status !== "pending") throw new Error("This request has already been reviewed.");
+  if (approve) {
+    const link = await getPromoterTelegramLink(env, payment.telegram_user_id);
+    if (!link) throw new Error("The promoter disconnected their account. Ask them to reconnect first.");
+    const until = adsSqlAfterDays(30);
+    await env.DB.prepare("INSERT INTO telegram_ads_accounts (telegram_user_id,plan,paid_until,next_run_at,created_at,updated_at) VALUES (?,'paid',?,?,?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET plan='paid',paid_until=excluded.paid_until,next_run_at=excluded.next_run_at,updated_at=excluded.updated_at")
+      .bind(String(payment.telegram_user_id), until, nowSql(), nowSql(), nowSql()).run();
+    await env.DB.prepare("UPDATE telegram_ads_payments SET status='approved',reviewed_at=?,reviewed_by=?,paid_until=? WHERE id=? AND status='pending'")
+      .bind(nowSql(), String(reviewer), until, Number(id)).run();
+    await telegramApi(env, "sendMessage", {chat_id:payment.chat_id,text:"🎉 Your Paid Ads Plan is approved! It is active for 30 days, until " + until + ". Promotions will run every 30 minutes in your verified groups."});
+    return {status:"approved",until};
+  }
+  await env.DB.prepare("UPDATE telegram_ads_payments SET status='rejected',reviewed_at=?,reviewed_by=? WHERE id=? AND status='pending'")
+    .bind(nowSql(), String(reviewer), Number(id)).run();
+  await telegramApi(env, "sendMessage", {chat_id:payment.chat_id,text:"❌ Your Paid Ads payment request was not approved. Please check the UTR and contact support if you believe this is a mistake."});
+  return {status:"rejected"};
+}
+async function handleAdsPaymentUtr(env, session, chatId, userId, text) {
+  try {
+    const id = await submitAdsUtr(env, chatId, userId, text);
+    session.step="idle"; session.data={};
+    await saveTelegramSession(env,session);
+    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"✅ UTR submitted. Request #"+id+" is pending admin approval. Your plan activates only after approval."});
+  } catch(error) {
+    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"❌ "+escapeTelegramHtml(error.message || "Could not submit UTR.")+"\\nSend it again, or use /cancel."});
+  }
+}
+
 async function runTelegramAdsScheduler(env) {
   await ensureSchema(env);
   const now = nowSql();
@@ -2416,7 +2522,7 @@ async function runTelegramAdsScheduler(env) {
     }
     if (!eligible.length) {
       if (earliestCooldown) {
-        const resume = new Date(earliestCooldown).toISOString().replace("T", " ").replace(/\\.\\d{3}Z$/, "");
+        const resume = new Date(earliestCooldown).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
         await env.DB.prepare("UPDATE telegram_ads_accounts SET next_run_at=? WHERE telegram_user_id=?").bind(resume, userId).run();
       }
       continue;
