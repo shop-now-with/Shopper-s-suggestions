@@ -137,6 +137,22 @@ CREATE TABLE IF NOT EXISTS announcements (
   email_sent INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS announcement_reads (
+  user_id INTEGER NOT NULL,
+  announcement_id INTEGER NOT NULL,
+  read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, announcement_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS notice_reads (
+  user_id INTEGER NOT NULL,
+  notice_id INTEGER NOT NULL,
+  read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, notice_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (notice_id) REFERENCES login_notices(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS conversations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1141,6 +1157,13 @@ async function handleMyNotices(request, env) {
   const rows = await env.DB.prepare("SELECT id,title,body,created_at FROM login_notices WHERE user_id=? ORDER BY id DESC LIMIT 30").bind(user.id).all();
   return json({ ok: true, notices: rows.results || [] });
 }
+async function handleMarkAnnouncementsRead(request, env) {
+  const user = await requireUser(request, env);
+  if (!user) return json({ ok: false, error: "Sign in required" }, 401);
+  await env.DB.prepare("INSERT OR IGNORE INTO announcement_reads (user_id,announcement_id) SELECT ?,id FROM announcements").bind(user.id).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO notice_reads (user_id,notice_id) SELECT ?,id FROM login_notices WHERE user_id=?").bind(user.id,user.id).run();
+  return json({ ok: true, unread_count: 0 });
+}
 async function requireAdmin(request, env) {
   const admin = await adminUser(request, env);
   return admin;
@@ -1259,7 +1282,14 @@ async function sendCommunityEmail(env, subject, body) {
 async function handleAnnouncements(request, env) {
   if (request.method === "GET") {
     const result = await env.DB.prepare("SELECT id, title, body, created_at FROM announcements ORDER BY id DESC LIMIT 100").all();
-    return json({ ok: true, announcements: result.results || [] });
+    const user = await currentUser(request, env);
+    let unreadCount = 0;
+    if (user) {
+      const globalUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM announcements a WHERE NOT EXISTS (SELECT 1 FROM announcement_reads r WHERE r.user_id=? AND r.announcement_id=a.id)").bind(user.id).first();
+      const noticeUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM login_notices n WHERE n.user_id=? AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.user_id=? AND r.notice_id=n.id)").bind(user.id,user.id).first();
+      unreadCount = Number(globalUnread?.count || 0) + Number(noticeUnread?.count || 0);
+    }
+    return json({ ok: true, announcements: result.results || [], unread_count: unreadCount });
   }
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ ok: false, error: "Administrator access required" }, 403);
@@ -1458,6 +1488,7 @@ export default {
       if (path === "/api/admin/promoters" && ["GET","POST"].includes(request.method)) return handleAdminPromoters(request, env);
       if (path === "/api/admin/announcements" && request.method === "POST") return handleAnnouncements(request, env);
       if (path === "/api/announcements" && request.method === "GET") return handleAnnouncements(request, env);
+      if (path === "/api/announcements/read" && request.method === "POST") return handleMarkAnnouncementsRead(request, env);
       if (path === "/api/notices" && request.method === "GET") return handleMyNotices(request, env);
       if (path === "/api/users/search" && request.method === "GET") return handleUserSearch(request, env);
       const publicProfileMatch = path.match(/^\/api\/users\/(\d+)$/);
