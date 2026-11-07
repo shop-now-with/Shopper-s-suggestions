@@ -470,7 +470,7 @@ async function githubGet(env, path) {
 }
 function bytesToBase64(bytes) {
   let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += 0x2000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x2000));
   return btoa(binary);
 }
 async function githubUpload(env, path, bytes, contentType, message) {
@@ -911,6 +911,7 @@ async function handleDeleteProduct(request, env, id) {
   return json({ ok: true, deleted: Number(id) });
 }
 async function handleUploadMedia(request, env) {
+  try {
   const admin = await adminUser(request,env);
   const user = await currentUser(request,env);
   const promoter = user ? await approvedPromoter(env,user.id) : null;
@@ -932,6 +933,11 @@ async function handleUploadMedia(request, env) {
   const path = `media/${filename}`;
   const uploaded = await githubUpload(env, path, new Uint8Array(await file.arrayBuffer()), file.type || (isVideo ? "video/mp4" : "image/jpeg"), `Upload media ${filename}`);
   return json({ ok: true, url: uploaded.url, path: uploaded.path, type: isVideo ? "video" : "image" });
+  } catch (error) {
+    const diagnostic = String(error?.message || error || "Unknown upload error").slice(0, 400);
+    console.error("MEDIA_UPLOAD_FAILED:", diagnostic, error?.stack || "");
+    return json({ ok: false, error: "Media upload failed", diagnostic }, 500);
+  }
 }
 async function handleDeleteMedia(request, env) {
   if (!(await isAdmin(request, env))) return json({ ok: false, error: "Unauthorized" }, 401);
