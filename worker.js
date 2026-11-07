@@ -1681,6 +1681,25 @@ export default {
       const shareMatch = path.match(/^\/api\/share\/(\d+)$/);
       if (shareMatch && request.method === "GET") return handleShareProduct(request, env, shareMatch[1]);
       if (path.startsWith("/api/telegram")) return json({ ok: false, error: "Telegram is handled by the separate bot Worker." }, 404);
+
+      // Serve the latest website pages committed to GitHub while preserving the
+      // existing ASSETS bundle for every other static file.
+      if (request.method === "GET" && ["/", "/index.html", "/profile.html", "/upload.html"].includes(path)) {
+        const filePath = path === "/" ? "index.html" : path.slice(1);
+        try {
+          const page = await fetch(githubRawUrl(env, filePath), { cf: { cacheTtl: 60, cacheEverything: true } });
+          if (page.ok) {
+            const headers = new Headers(page.headers);
+            headers.set("Content-Type", "text/html; charset=utf-8");
+            headers.set("Cache-Control", "public, max-age=60, s-maxage=60");
+            headers.delete("content-length");
+            headers.delete("content-encoding");
+            return new Response(page.body, { status: 200, headers });
+          }
+        } catch (error) {
+          console.error("GitHub page fetch failed; falling back to deployed assets:", error);
+        }
+      }
       return env.ASSETS.fetch(request);
     } catch (error) {
       console.error("SHOPPER'S SUGGESTIONS WORKER ERROR:", error);
