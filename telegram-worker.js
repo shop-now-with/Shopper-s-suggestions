@@ -351,6 +351,7 @@ async function ensureSchema(env) {
   const adsCols = await env.DB.prepare("PRAGMA table_info(telegram_ads_verified_chats)").all();
   const adsNames = new Set((adsCols.results || []).map((r) => r.name));
   if (!adsNames.has("batch_number")) await env.DB.prepare("ALTER TABLE telegram_ads_verified_chats ADD COLUMN batch_number INTEGER NOT NULL DEFAULT 1").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO telegram_ads_accounts (telegram_user_id,plan,next_run_at,groups_in_batch,batch_number,next_group_batch_at,created_at,updated_at) SELECT telegram_user_id,'free',CASE WHEN COUNT(*)>=3 THEN ? ELSE NULL END,COUNT(*)%3,CAST((COUNT(*)-1)/3 AS INTEGER)+1,CASE WHEN COUNT(*)>=3 AND COUNT(*)%3=0 THEN ? ELSE NULL END,?,? FROM telegram_ads_verified_chats WHERE active=1 GROUP BY telegram_user_id").bind(nowSql(), adsSqlAfterDays(20), nowSql(), nowSql()).run();
 }
 
 async function getProduct(env, id) {
