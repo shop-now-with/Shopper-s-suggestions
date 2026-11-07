@@ -1958,7 +1958,6 @@ async function handleTelegramUpdate(update, env) {
             `/chats\n` +
             `/refreshchat CHAT_ID\n` +
             `/stats\n` +
-            `/stats\n` +
             `/setadsqr — Set paid plan QR\n` +
             `/showadsqr — View current QR\n` +
             `/removeadsqr — Remove current QR\n` +
