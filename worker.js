@@ -830,6 +830,21 @@ async function handleIntegrationProductById(request, env, productId) {
   if (!existing) return json({ ok: false, error: "Product not found in your account" }, 404);
 
   if (request.method === "DELETE") {
+    const mediaUrls = [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean);
+    for (const mediaUrl of mediaUrls) {
+      try {
+        const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
+        if (mediaUrl.startsWith(prefix)) {
+          const path = decodeURIComponent(mediaUrl.slice(prefix.length));
+          if (path.startsWith("media/")) {
+            const refs = await env.DB.prepare("SELECT id FROM products WHERE id != ? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1").bind(productId, mediaUrl, mediaUrl, mediaUrl, mediaUrl, mediaUrl).first();
+            if (!refs) await githubDelete(env, path, `Delete media for product ${productId}`);
+          }
+        }
+      } catch (error) {
+        console.error("GitHub media delete failed:", error);
+      }
+    }
     await env.DB.prepare("DELETE FROM products WHERE id=? AND uploader_id=?").bind(productId, owner.id).run();
     return json({ ok: true, deleted: Number(productId) });
   }
