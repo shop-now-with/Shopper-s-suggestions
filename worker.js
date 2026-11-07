@@ -849,9 +849,13 @@ async function handleCreateProduct(request, env) {
   const result = await env.DB.prepare(`
     INSERT INTO products (title, description, affiliate_url, category, image1_url, image2_url, image3_url, image4_url, image5_url, video_url, published, featured, price, original_price, uploader_id, expires_at, listing_duration_hours)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ?=1 THEN NULL ELSE datetime('now', ?) END, ?)
-    RETURNING id
-  `).bind(title, description, affiliateUrl, category, ...images, videoUrl, body.published === undefined ? 1 : (isTrue(body.published) ? 1 : 0), isTrue(body.featured) ? 1 : 0, price, originalPrice, uploaderId, permanent?1:0, `+${durationHours} hours`, permanent?0:durationHours).first();
-  const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).bind(result.id).first();
+  `).bind(title, description, affiliateUrl, category, ...images, videoUrl, body.published === undefined ? 1 : (isTrue(body.published) ? 1 : 0), isTrue(body.featured) ? 1 : 0, price, originalPrice, uploaderId, permanent?1:0, `+${durationHours} hours`, permanent?0:durationHours).run();
+  const productId = Number(result?.meta?.last_row_id);
+  if (!Number.isSafeInteger(productId) || productId <= 0) {
+    throw new Error("Product was inserted but the database did not return its new ID.");
+  }
+  const product = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).bind(productId).first();
+  if (!product) throw new Error("Product was inserted but could not be loaded from the database.");
   return json({ ok: true, product: productPublic(product) }, 201);
 }
 async function handleUpdateProduct(request, env, id) {
