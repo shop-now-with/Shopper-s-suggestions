@@ -599,7 +599,7 @@ async function sendHelp(env, chatId, admin = false) {
     `/request your idea\n\n` +
     `🆔 /getid\n` +
     `👤 /myid\n\n` +
-    `You can also type a product name without a command.\\n\\n` +
+    `You can also type a product name without a command.\n\n` +
     `👤 Promoters: /connect, /upload, /disconnect`;
 
   if (admin) {
@@ -1356,6 +1356,7 @@ async function handleTelegramUpdate(update, env) {
         `👋 <b>Welcome to Shopper's Suggestions!</b>\n\n` +
         `🔎 Search products, explore categories and discover featured picks.\n\n` +
         `Try <code>/search wireless earbuds</code> or <code>/category Tech</code>.\n\n` +
+        `Promoters: /connect to link your account, then /upload to add products.\n\n` +
         `Use /help for all commands.`,
       parse_mode: "HTML"
     });
