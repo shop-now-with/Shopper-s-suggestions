@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS telegram_ads_verified_chats (
   active INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_ads_verified_user ON telegram_ads_verified_chats(telegram_user_id, active);
+
+CREATE TABLE IF NOT EXISTS telegram_ads_accounts (telegram_user_id TEXT PRIMARY KEY, plan TEXT NOT NULL DEFAULT 'free', paid_until TEXT, next_run_at TEXT, groups_in_batch INTEGER NOT NULL DEFAULT 0, batch_number INTEGER NOT NULL DEFAULT 1, next_group_batch_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS telegram_ads_product_cycles (telegram_user_id TEXT NOT NULL, product_id TEXT NOT NULL, sent_count INTEGER NOT NULL DEFAULT 0, cooldown_until TEXT, last_sent_at TEXT, PRIMARY KEY (telegram_user_id, product_id));
+CREATE TABLE IF NOT EXISTS telegram_ads_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id TEXT NOT NULL, chat_id TEXT NOT NULL, utr TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, paid_until TEXT);
+CREATE TABLE IF NOT EXISTS telegram_ads_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 `;
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -343,6 +348,9 @@ async function ensureSchema(env) {
   if (!names.has("featured")) {
     await env.DB.prepare("ALTER TABLE products ADD COLUMN featured INTEGER NOT NULL DEFAULT 0").run();
   }
+  const adsCols = await env.DB.prepare("PRAGMA table_info(telegram_ads_verified_chats)").all();
+  const adsNames = new Set((adsCols.results || []).map((r) => r.name));
+  if (!adsNames.has("batch_number")) await env.DB.prepare("ALTER TABLE telegram_ads_verified_chats ADD COLUMN batch_number INTEGER NOT NULL DEFAULT 1").run();
 }
 
 async function getProduct(env, id) {
@@ -1305,18 +1313,17 @@ async function handleTelegramCallback(update, env) {
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Connect your promoter account in a private chat before choosing an ads plan." });
       return;
     }
+    await ensureAdsAccount(env, userId);
     if (data === "adsrun:free") {
+      await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free',paid_until=NULL,updated_at=? WHERE telegram_user_id=?").bind(nowSql(), String(userId)).run();
+      const groups = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(String(userId)).first();
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "🆓 <b>Free Plan setup</b>\n\nAdd the bot as an admin to 3 groups/channels where you have permission to manage promotions. Then use /adsverify inside each group to verify it.\n\nFree Plan details: one promotion every 60 minutes, 10 sends per product, then a 40-minute cooldown. After the bot is added as a group administrator, run /adsverify inside each of your first 3 groups. The bot checks that you are a group admin and that it can post before registering the group.",
+        text: "🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups/supergroups where you are an admin and this bot can post. Use /adsverify inside each group.\\n\\n📣 Promotions: every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 20 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: " + Number(groups?.total || 0) + ".",
         parse_mode: "HTML"
       });
     } else {
-      await telegramApi(env, "sendMessage", {
-        chat_id: chatId,
-        text: "⭐ <b>Paid Plan — ₹150/month</b>\n\nPayment and UTR submission will be connected after the payment QR is configured. Subscription activation requires admin approval and lasts 30 days.",
-        parse_mode: "HTML"
-      });
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⭐ Paid Plan payment setup is being prepared. Please try again shortly." });
     }
     return;
   }
@@ -1406,33 +1413,31 @@ async function verifyAdsGroup(env, message) {
   const countRow = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id = ? AND active = 1")
     .bind(telegramUserId).first();
   const currentCount = Number(countRow?.total || 0);
-  if (currentCount >= 3) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Your first 3 groups are already registered. This group was not added. Contact support if you need to change your registered groups." });
+  const account = await ensureAdsAccount(env, telegramUserId);
+  const nextBatchAt = account?.next_group_batch_at ? Date.parse(String(account.next_group_batch_at).replace(" ", "T") + "Z") : 0;
+  if (currentCount >= 3 && currentCount % 3 === 0 && nextBatchAt && nextBatchAt > Date.now()) {
+    const daysLeft = Math.ceil((nextBatchAt - Date.now()) / 86400000);
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⏳ Your next 3-group batch opens in about " + daysLeft + " day(s). All previously verified groups stay active and continue receiving ads." });
     return;
   }
-
   try {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "discover the best by shopper’s suggestions!" });
   } catch {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Telegram could not send the verification message, so this group has not been registered. Check my posting permission and try again." });
     return;
   }
-
-  await env.DB.prepare(`
-    INSERT INTO telegram_ads_verified_chats (chat_id, telegram_user_id, chat_type, title, verified_at, active)
-    VALUES (?, ?, ?, ?, ?, 1)
-    ON CONFLICT(chat_id) DO UPDATE SET
-      telegram_user_id = excluded.telegram_user_id,
-      chat_type = excluded.chat_type,
-      title = excluded.title,
-      verified_at = excluded.verified_at,
-      active = 1
-  `).bind(chatId, telegramUserId, chat.type, cleanText(chat.title || chat.username || "Telegram group", 200), nowSql()).run();
-
   const newCount = currentCount + 1;
+  const batchNumber = Math.floor(currentCount / 3) + 1;
+  const batchComplete = newCount % 3 === 0;
+  const nextBatch = batchComplete ? adsSqlAfterDays(20) : (account?.next_group_batch_at || null);
+  await env.DB.prepare("INSERT INTO telegram_ads_verified_chats (chat_id,telegram_user_id,chat_type,title,verified_at,active,batch_number) VALUES (?,?,?,?,?,1,?) ON CONFLICT(chat_id) DO UPDATE SET telegram_user_id=excluded.telegram_user_id,chat_type=excluded.chat_type,title=excluded.title,verified_at=excluded.verified_at,active=1,batch_number=excluded.batch_number")
+    .bind(chatId, telegramUserId, chat.type, cleanText(chat.title || chat.username || "Telegram group", 200), nowSql(), batchNumber).run();
+  await env.DB.prepare("UPDATE telegram_ads_accounts SET groups_in_batch=?,batch_number=?,next_group_batch_at=?,next_run_at=CASE WHEN ? >= 3 AND next_run_at IS NULL THEN ? ELSE next_run_at END,updated_at=? WHERE telegram_user_id=?")
+    .bind(newCount % 3, batchNumber, nextBatch, newCount, nowSql(), nowSql(), telegramUserId).run();
   await telegramApi(env, "sendMessage", {
     chat_id: chatId,
-    text: `✅ Group verified for your Shopper's Suggestions account (${newCount}/3). ${newCount === 3 ? "Your 3-group verification requirement is complete." : `Add ${3 - newCount} more group(s) and run /adsverify in each.`}`
+    text: "✅ Group verified (" + newCount + " total). " +
+      (batchComplete ? "This batch is complete. You can add 3 more groups in 20 days. All groups remain active for ads." : "Add " + (3 - (newCount % 3)) + " more group(s) in this batch. Previously verified groups stay active.")
   });
 }
 
@@ -2361,6 +2366,84 @@ async function handleTelegramUpdate(update, env) {
   }
 }
 
+
+function adsSqlAfterMinutes(minutes) {
+  return new Date(Date.now() + Number(minutes) * 60000).toISOString().replace("T", " ").replace(/\\.\\d{3}Z$/, "");
+}
+function adsSqlAfterDays(days) { return adsSqlAfterMinutes(Number(days) * 1440); }
+async function ensureAdsAccount(env, userId) {
+  await env.DB.prepare("INSERT OR IGNORE INTO telegram_ads_accounts (telegram_user_id, plan, created_at, updated_at) VALUES (?, 'free', ?, ?)")
+    .bind(String(userId), nowSql(), nowSql()).run();
+  return env.DB.prepare("SELECT * FROM telegram_ads_accounts WHERE telegram_user_id=? LIMIT 1").bind(String(userId)).first();
+}
+async function runTelegramAdsScheduler(env) {
+  await ensureSchema(env);
+  const now = nowSql();
+  const due = await env.DB.prepare("SELECT * FROM telegram_ads_accounts WHERE next_run_at IS NULL OR next_run_at<=? ORDER BY COALESCE(next_run_at, created_at) LIMIT 100").bind(now).all();
+  for (const account of due.results || []) {
+    const userId = String(account.telegram_user_id);
+    const paidUntil = account.paid_until ? Date.parse(String(account.paid_until).replace(" ", "T") + "Z") : 0;
+    const paid = account.plan === "paid" && paidUntil > Date.now();
+    if (account.plan === "paid" && !paid) {
+      await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free', paid_until=NULL, updated_at=? WHERE telegram_user_id=?").bind(nowSql(), userId).run();
+    }
+    const groupRows = await env.DB.prepare("SELECT chat_id FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1 ORDER BY verified_at").bind(userId).all();
+    const groups = groupRows.results || [];
+    if (groups.length < (paid ? 1 : 3)) continue;
+    const interval = paid ? 30 : 60;
+    const nextRun = adsSqlAfterMinutes(interval);
+    const claim = await env.DB.prepare("UPDATE telegram_ads_accounts SET next_run_at=?, updated_at=? WHERE telegram_user_id=? AND (next_run_at IS NULL OR next_run_at<=?)").bind(nextRun, nowSql(), userId, now).run();
+    if (!Number(claim.meta?.changes || 0)) continue;
+    const link = await getPromoterTelegramLink(env, userId);
+    if (!link) continue;
+    let products = [];
+    try { products = await getTelegramPromoterProducts(env, link.chat_id, userId); }
+    catch (error) { console.error("Ads scheduler product lookup failed", userId, error); continue; }
+    products = (products || []).filter(p => Number(p.published) === 1 && p.id != null);
+    if (!products.length) continue;
+    const eligible = [];
+    let earliestCooldown = 0;
+    for (const product of products) {
+      const state = await env.DB.prepare("SELECT sent_count,cooldown_until FROM telegram_ads_product_cycles WHERE telegram_user_id=? AND product_id=? LIMIT 1").bind(userId, String(product.id)).first();
+      let count = Number(state?.sent_count || 0);
+      const cooldown = state?.cooldown_until ? Date.parse(String(state.cooldown_until).replace(" ", "T") + "Z") : 0;
+      if (count >= 10 && cooldown && cooldown <= Date.now()) {
+        count = 0;
+        await env.DB.prepare("UPDATE telegram_ads_product_cycles SET sent_count=0,cooldown_until=NULL WHERE telegram_user_id=? AND product_id=?").bind(userId, String(product.id)).run();
+      }
+      if (count < 10) eligible.push({product, count});
+      else if (cooldown && (!earliestCooldown || cooldown < earliestCooldown)) earliestCooldown = cooldown;
+    }
+    if (!eligible.length) {
+      if (earliestCooldown) {
+        const resume = new Date(earliestCooldown).toISOString().replace("T", " ").replace(/\\.\\d{3}Z$/, "");
+        await env.DB.prepare("UPDATE telegram_ads_accounts SET next_run_at=? WHERE telegram_user_id=?").bind(resume, userId).run();
+      }
+      continue;
+    }
+    const choice = eligible[Math.floor(Math.random() * eligible.length)];
+    let sent = 0;
+    for (const group of groups) {
+      try {
+        await sendProductMediaToTelegram(env, group.chat_id, choice.product);
+        sent++;
+      } catch (error) {
+        const message = String(error.message || error);
+        console.error("Ads send failed", group.chat_id, message);
+        if (/bot was blocked|CHAT_WRITE_FORBIDDEN|chat not found|not enough rights/i.test(message)) {
+          await env.DB.prepare("UPDATE telegram_ads_verified_chats SET active=0 WHERE chat_id=? AND telegram_user_id=?").bind(String(group.chat_id), userId).run();
+        }
+      }
+    }
+    if (sent) {
+      const count = choice.count + 1;
+      const cooldownUntil = count >= 10 ? adsSqlAfterMinutes(paid ? 600 : 40) : null;
+      await env.DB.prepare("INSERT INTO telegram_ads_product_cycles (telegram_user_id,product_id,sent_count,cooldown_until,last_sent_at) VALUES (?,?,?,?,?) ON CONFLICT(telegram_user_id,product_id) DO UPDATE SET sent_count=excluded.sent_count,cooldown_until=excluded.cooldown_until,last_sent_at=excluded.last_sent_at")
+        .bind(userId, String(choice.product.id), count, cooldownUntil, nowSql()).run();
+    }
+  }
+}
+
 async function handleTelegramRequest(request, env) {
   const secret = cleanText(env.TELEGRAM_WEBHOOK_SECRET);
   if (secret) {
@@ -2450,6 +2533,9 @@ async function health(env) {
 }
 
 export default {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runTelegramAdsScheduler(env).catch(error => console.error("Scheduled ads run failed", error)));
+  },
   async fetch(request, env, ctx) {
     try {
       if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), request);
