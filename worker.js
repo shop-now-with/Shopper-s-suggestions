@@ -273,7 +273,7 @@ async function executeSchema(env, schema) {
   }
 }
 
-async function ensureSchema(env) {
+async function initializeSchema(env) {
   if (!env || !env.DB) throw new Error("Cloudflare D1 binding 'DB' is missing.");
   await executeSchema(env, BASE_SCHEMA);
   await executeSchema(env, USER_SCHEMA);
@@ -375,6 +375,11 @@ async function ensureSchema(env) {
     const columns = tableColumns[table] || new Set();
     if (requiredColumns.every(column => columns.has(column))) await env.DB.prepare(sql).run();
   }
+}
+let schemaInitialization = null;
+async function ensureSchema(env) {
+  if (!schemaInitialization) schemaInitialization = initializeSchema(env).catch(error => { schemaInitialization = null; throw error; });
+  return schemaInitialization;
 }
 function adminCookie(id) {
   return [`shopper_admin_session=${encodeURIComponent(id)}`, "HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=604800"].join("; ");
@@ -988,6 +993,11 @@ async function handleGoogleCallback(request, env) {
   return new Response(null, { status: 302, headers });
 }
 async function handleMe(request, env) {
+  const session = activeUserSession(request);
+  if (session) {
+    const banned = await env.DB.prepare(`SELECT u.id, u.email, u.display_name FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>CURRENT_TIMESTAMP AND u.is_banned=1 LIMIT 1`).bind(session).first();
+    if (banned) return json({ ok: true, authenticated: false, banned: true, user: { id: banned.id, email: banned.email, display_name: banned.display_name } });
+  }
   const user = await currentUser(request, env);
   if (!user) return json({ ok: true, authenticated: false, user: null });
   const promoter = await env.DB.prepare("SELECT id, status FROM promoters WHERE user_id = ? LIMIT 1").bind(user.id).first();
