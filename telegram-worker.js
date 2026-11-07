@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS telegram_promoter_links (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS telegram_ads_verified_chats (
+  chat_id TEXT PRIMARY KEY,
+  telegram_user_id TEXT NOT NULL,
+  chat_type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  verified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  active INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_ads_verified_user ON telegram_ads_verified_chats(telegram_user_id, active);
 `;
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -1298,7 +1308,7 @@ async function handleTelegramCallback(update, env) {
     if (data === "adsrun:free") {
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "🆓 <b>Free Plan setup</b>\n\nAdd the bot as an admin to 3 groups/channels where you have permission to manage promotions. Then use /adsverify inside each group to verify it.\n\nFree Plan details: one promotion every 60 minutes, 10 sends per product, then a 40-minute cooldown. Verification and weekly renewal will be enabled in the next setup step.",
+        text: "🆓 <b>Free Plan setup</b>\n\nAdd the bot as an admin to 3 groups/channels where you have permission to manage promotions. Then use /adsverify inside each group to verify it.\n\nFree Plan details: one promotion every 60 minutes, 10 sends per product, then a 40-minute cooldown. After the bot is added as a group administrator, run /adsverify inside each of your first 3 groups. The bot checks that you are a group admin and that it can post before registering the group.",
         parse_mode: "HTML"
       });
     } else {
@@ -1322,6 +1332,104 @@ async function handleTelegramCallback(update, env) {
       text: `Category selected: ${category}\n\nSend up to 5 direct image URLs (https://...). Type done when finished, or skip to continue without images.`
     });
   }
+}
+
+async function verifyAdsGroup(env, message) {
+  const chat = message.chat;
+  const user = message.from;
+  const chatId = String(chat?.id || "");
+  const telegramUserId = String(user?.id || "");
+  if (!telegramUserId || !chatId) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "I couldn't identify the person running this command. Please use /adsverify from your own Telegram account." });
+    return;
+  }
+  if (chat.type === "channel") {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Channel verification is not supported by this command yet. Please verify a group or supergroup instead." });
+    return;
+  }
+  if (chat.type !== "group" && chat.type !== "supergroup") {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Run /adsverify inside the group you want to register, not in a private chat." });
+    return;
+  }
+
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 First open a private chat with this bot, use /connect, and connect your approved Shopper's Suggestions promoter account. Then return here and run /adsverify." });
+    return;
+  }
+
+  let member;
+  let botInfo;
+  try {
+    [member, botInfo] = await Promise.all([
+      telegramApi(env, "getChatMember", { chat_id: chatId, user_id: Number(telegramUserId) }),
+      telegramApi(env, "getMe", {})
+    ]);
+  } catch (error) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I couldn't verify group permissions. Make sure the bot is still in this group, then try again." });
+    return;
+  }
+
+  const userStatus = member.result?.status;
+  if (!["creator", "administrator"].includes(userStatus)) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Only a group owner or administrator can register this group for their ads account." });
+    return;
+  }
+
+  let botMember;
+  try {
+    botMember = await telegramApi(env, "getChatMember", { chat_id: chatId, user_id: botInfo.result.id });
+  } catch {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I couldn't check my own group permissions. Please make me a group administrator and try again." });
+    return;
+  }
+  const botStatus = botMember.result?.status;
+  const canPost = botStatus === "creator" || botStatus === "administrator" ||
+    (botStatus === "member") ||
+    (botStatus === "restricted" && botMember.result?.can_send_messages === true);
+  if (!canPost || ["left", "kicked"].includes(botStatus)) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I don't have permission to post in this group. Give me permission to send messages, then run /adsverify again." });
+    return;
+  }
+
+  const existing = await env.DB.prepare("SELECT chat_id FROM telegram_ads_verified_chats WHERE chat_id = ? AND telegram_user_id = ? AND active = 1 LIMIT 1")
+    .bind(chatId, telegramUserId).first();
+  if (existing) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ This group is already verified for your Shopper's Suggestions account." });
+    return;
+  }
+
+  const countRow = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id = ? AND active = 1")
+    .bind(telegramUserId).first();
+  const currentCount = Number(countRow?.total || 0);
+  if (currentCount >= 3) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Your first 3 groups are already registered. This group was not added. Contact support if you need to change your registered groups." });
+    return;
+  }
+
+  try {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "discover the best by shopper’s suggestions!" });
+  } catch {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Telegram could not send the verification message, so this group has not been registered. Check my posting permission and try again." });
+    return;
+  }
+
+  await env.DB.prepare(`
+    INSERT INTO telegram_ads_verified_chats (chat_id, telegram_user_id, chat_type, title, verified_at, active)
+    VALUES (?, ?, ?, ?, ?, 1)
+    ON CONFLICT(chat_id) DO UPDATE SET
+      telegram_user_id = excluded.telegram_user_id,
+      chat_type = excluded.chat_type,
+      title = excluded.title,
+      verified_at = excluded.verified_at,
+      active = 1
+  `).bind(chatId, telegramUserId, chat.type, cleanText(chat.title || chat.username || "Telegram group", 200), nowSql()).run();
+
+  const newCount = currentCount + 1;
+  await telegramApi(env, "sendMessage", {
+    chat_id: chatId,
+    text: `✅ Group verified for your Shopper's Suggestions account (${newCount}/3). ${newCount === 3 ? "Your 3-group verification requirement is complete." : `Add ${3 - newCount} more group(s) and run /adsverify in each.`}`
+  });
 }
 
 async function handleTelegramUpdate(update, env) {
@@ -1354,6 +1462,11 @@ async function handleTelegramUpdate(update, env) {
   // bot command unless the post actually contains a command.
   const isChannelPost = chat?.type === "channel";
   if (isChannelPost && !text.trim().startsWith("/")) return;
+
+  if (command === "adsverify") {
+    await verifyAdsGroup(env, message);
+    return;
+  }
 
   if (command === "cancel") {
     await resetTelegramProductDraft(env, chatId);
@@ -1533,7 +1646,7 @@ async function handleTelegramUpdate(update, env) {
           { command: "editproduct", description: "Edit your product" },
           { command: "deleteproduct", description: "Delete your product" },
           { command: "disconnect", description: "Disconnect your account" },
-          { command: "adsrun", description: "Set up product promotions" },
+          { command: "adsrun", description: "Set up product promotions" },\n          { command: "adsverify", description: "Verify this group for ads" },
           { command: "myid", description: "Show your Telegram user ID" },
           { command: "cancel", description: "Cancel the current action" }
         ]
@@ -1597,7 +1710,7 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","myid","getid","id","cancel"]);
+  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
