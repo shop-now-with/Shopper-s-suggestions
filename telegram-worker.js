@@ -482,7 +482,7 @@ async function sendProductMediaToTelegram(env, chatId, product) {
 
   await telegramSendWithRetry(env, "sendMessage", {
     chat_id: chatId,
-    text: caption,
+    text: "✨ <b>CHECK IT OUT!</b> ✨\n\n" + caption,
     parse_mode: "HTML",
     disable_web_page_preview: false,
     reply_markup: markup
@@ -1296,7 +1296,7 @@ async function handleTelegramCallback(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: `Category selected: ${category}\n\nNow send product images one by one. Type done when finished, or skip for no more images.`
+      text: `Category selected: ${category}\n\nSend up to 5 direct image URLs (https://...). Type done when finished, or skip to continue without images.`
     });
   }
 }
@@ -2085,41 +2085,36 @@ async function handleTelegramUpdate(update, env) {
     }
 
     if (message.photo?.length) {
-      if ((s.data.images || []).length >= 5) {
-        await telegramApi(env, "sendMessage", {
-          chat_id: chatId,
-          text: "🖼️ You already have 5 images. Type done."
-        });
-        return;
-      }
-
-      try {
-        const photo = message.photo[message.photo.length - 1];
-        const file = await downloadTelegramFile(env, photo.file_id, "image");
-        const uploaded = await githubUpload(env, file.bytes, file.filename, file.type);
-        s.data.images = Array.isArray(s.data.images) ? s.data.images : [];
-        s.data.images.push(uploaded.url);
-        await saveTelegramSession(env, s);
-
-        await telegramApi(env, "sendMessage", {
-          chat_id: chatId,
-          text: `🖼️ Image ${s.data.images.length}/5 saved. Send another image or type done.`
-        });
-      } catch (error) {
-        await telegramApi(env, "sendMessage", {
-          chat_id: chatId,
-          text:
-            `❌ Image upload failed.\n\n` +
-            `${escapeTelegramHtml(error.message || "Unknown error")}`,
-          parse_mode: "HTML"
-        });
-      }
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "🖼️ Please send a direct image URL instead of a Telegram photo. Example: https://example.com/product-image.jpg"
+      });
       return;
     }
 
+    let imageUrl = "";
+    try {
+      const parsed = new URL(text.trim());
+      if (!/^https?:$/.test(parsed.protocol)) throw new Error();
+      imageUrl = parsed.href;
+    } catch {
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "🖼️ Send a valid direct http(s) image URL, or type done to continue without images."
+      });
+      return;
+    }
+
+    s.data.images = Array.isArray(s.data.images) ? s.data.images : [];
+    if (s.data.images.length >= 5) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🖼️ You already added 5 image links. Type done." });
+      return;
+    }
+    s.data.images.push(imageUrl);
+    await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "🖼️ Send an image or type done."
+      text: "✅ Image link " + s.data.images.length + "/5 saved. Send another direct image URL or type done."
     });
     return;
   }
