@@ -1384,14 +1384,18 @@ async function verifyAdsGroup(env, message) {
     return;
   }
   const botStatus = botMember.result?.status;
-  const canPost = botStatus === "creator" || botStatus === "administrator" ||
-    (botStatus === "member") ||
-    (botStatus === "restricted" && botMember.result?.can_send_messages === true);
-  if (!canPost || ["left", "kicked"].includes(botStatus)) {
+  const canPost = botStatus === "creator" || botStatus === "administrator";
+  if (!canPost) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I don't have permission to post in this group. Give me permission to send messages, then run /adsverify again." });
     return;
   }
 
+  const existingOwner = await env.DB.prepare("SELECT telegram_user_id FROM telegram_ads_verified_chats WHERE chat_id = ? AND active = 1 LIMIT 1")
+    .bind(chatId).first();
+  if (existingOwner && String(existingOwner.telegram_user_id) !== telegramUserId) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ This group is already registered to another Shopper's Suggestions account. It cannot be claimed by a different account." });
+    return;
+  }
   const existing = await env.DB.prepare("SELECT chat_id FROM telegram_ads_verified_chats WHERE chat_id = ? AND telegram_user_id = ? AND active = 1 LIMIT 1")
     .bind(chatId, telegramUserId).first();
   if (existing) {
