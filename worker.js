@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
   bio TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL DEFAULT 'user',
   is_banned INTEGER NOT NULL DEFAULT 0,
+  ban_reason TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -317,7 +318,7 @@ async function initializeSchema(env) {
     users: {
       google_id: "TEXT", email: "TEXT", username: "TEXT", display_name: "TEXT NOT NULL DEFAULT ''",
       avatar_url: "TEXT NOT NULL DEFAULT ''", bio: "TEXT NOT NULL DEFAULT ''", role: "TEXT NOT NULL DEFAULT 'user'",
-      is_banned: "INTEGER NOT NULL DEFAULT 0", created_at: "TEXT NOT NULL DEFAULT ''",
+      is_banned: "INTEGER NOT NULL DEFAULT 0", ban_reason: "TEXT NOT NULL DEFAULT ''", created_at: "TEXT NOT NULL DEFAULT ''",
       updated_at: "TEXT NOT NULL DEFAULT ''"
     },
     user_sessions: { user_id: "INTEGER", created_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT" },
@@ -1122,6 +1123,9 @@ async function handleGoogleCallback(request, env) {
   await env.DB.prepare("INSERT INTO user_sessions (id, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 days'))").bind(sessionId, user.id).run();
   await env.DB.prepare("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)").bind(user.id).run();
   await logActivity(env, user.id, "google_sign_in", "user", user.id);
+  if (isNewUser) {
+    await env.DB.prepare("INSERT INTO login_notices (user_id,title,body) VALUES (?,?,?)").bind(user.id, "Welcome to Shopper's Suggestions", "Welcome! Your Shopper's Suggestions account is ready. Complete your profile, explore products and save your favourites.").run();
+  }
   await env.DB.prepare("INSERT INTO login_notices (user_id,title,body) VALUES (?,?,?)").bind(user.id, "New sign-in", `A Google sign-in to your Shopper’s Suggestions account occurred at ${new Date().toISOString()}. If this was not you, sign out of other sessions and secure your Google account.`).run();
   try { await sendSingleEmail(env, email, "New sign-in to Shopper’s Suggestions", `A Google sign-in to your Shopper’s Suggestions account occurred at ${new Date().toISOString()}. If this was not you, secure your Google account.`); } catch (error) { console.error("Login notification email failed", error); }
   const headers = new Headers({ Location: "/" });
@@ -1134,8 +1138,8 @@ async function handleGoogleCallback(request, env) {
 async function handleMe(request, env) {
   const session = activeUserSession(request);
   if (session) {
-    const banned = await env.DB.prepare(`SELECT u.id, u.email, u.display_name FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>CURRENT_TIMESTAMP AND u.is_banned=1 LIMIT 1`).bind(session).first();
-    if (banned) return json({ ok: true, authenticated: false, banned: true, user: { id: banned.id, email: banned.email, display_name: banned.display_name } });
+    const banned = await env.DB.prepare(`SELECT u.id, u.email, u.display_name, u.ban_reason FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>CURRENT_TIMESTAMP AND u.is_banned=1 LIMIT 1`).bind(session).first();
+    if (banned) return json({ ok: true, authenticated: false, banned: true, ban_reason: banned.ban_reason || "", user: { id: banned.id, email: banned.email, display_name: banned.display_name, ban_reason: banned.ban_reason || "" } });
   }
   const user = await currentUser(request, env);
   if (!user) return json({ ok: true, authenticated: false, user: null });
@@ -1252,6 +1256,7 @@ async function handleProfile(request, env) {
     if (String(error?.message || error).toLowerCase().includes("unique")) return json({ ok: false, error: "That username is already taken." }, 409);
     throw error;
   }
+  await env.DB.prepare("UPDATE promoters SET display_name=?,username=?,avatar_url=?,bio=? WHERE user_id=?").bind(displayName,username || null,avatar,bio,user.id).run();
   const updated = await env.DB.prepare("SELECT id, email, username, display_name, avatar_url, bio, role, created_at FROM users WHERE id=?").bind(user.id).first();
   return json({ ok: true, user: updated });
 }
@@ -1277,14 +1282,14 @@ async function handleSettings(request, env) {
 async function handleMyNotices(request, env) {
   const user = await requireUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
-  const rows = await env.DB.prepare("SELECT id,title,body,created_at FROM login_notices WHERE user_id=? ORDER BY id DESC LIMIT 30").bind(user.id).all();
+  const rows = await env.DB.prepare("SELECT id,title,body,created_at FROM login_notices WHERE user_id=? AND title IN (?,?) ORDER BY id DESC LIMIT 30").bind(user.id,"Welcome to Shopper's Suggestions","New sign-in").all();
   return json({ ok: true, notices: rows.results || [] });
 }
 async function handleMarkAnnouncementsRead(request, env) {
   const user = await requireUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
-  await env.DB.prepare("INSERT OR IGNORE INTO announcement_reads (user_id,announcement_id) SELECT ?,id FROM announcements").bind(user.id).run();
-  await env.DB.prepare("INSERT OR IGNORE INTO notice_reads (user_id,notice_id) SELECT ?,id FROM login_notices WHERE user_id=?").bind(user.id,user.id).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO announcement_reads (user_id,announcement_id) SELECT ?,id FROM announcements WHERE created_at >= datetime('now','-3 days') AND created_at >= ?").bind(user.id,user.created_at || "1970-01-01 00:00:00").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO notice_reads (user_id,notice_id) SELECT ?,id FROM login_notices WHERE user_id=? AND title IN (?,?)").bind(user.id,user.id,"Welcome to Shopper's Suggestions","New sign-in").run();
   return json({ ok: true, unread_count: 0 });
 }
 async function requireAdmin(request, env) {
@@ -1322,7 +1327,7 @@ async function handleAdminRemove(request, env, emailEncoded) {
 }
 async function handleAdminUsers(request, env) {
   if (!(await requireAdmin(request, env))) return json({ ok: false, error: "Administrator access required" }, 403);
-  const result = await env.DB.prepare("SELECT u.id, u.email, u.username, u.display_name, u.created_at, u.is_banned, CASE WHEN a.email IS NOT NULL THEN 1 ELSE 0 END AS is_admin, CASE WHEN a.email IS NOT NULL THEN 'permanent' ELSE 'free' END AS subscription, COALESCE(p.status, 'none') AS promoter_status FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email) LEFT JOIN promoters p ON p.user_id=u.id ORDER BY u.id DESC LIMIT 500").all();
+  const result = await env.DB.prepare("SELECT u.id, u.email, u.username, u.display_name, u.created_at, u.is_banned, u.ban_reason, CASE WHEN a.email IS NOT NULL THEN 1 ELSE 0 END AS is_admin, CASE WHEN a.email IS NOT NULL THEN 'permanent' ELSE 'free' END AS subscription, COALESCE(p.status, 'none') AS promoter_status FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email) LEFT JOIN promoters p ON p.user_id=u.id ORDER BY u.id DESC LIMIT 500").all();
   return json({ ok: true, users: result.results || [] });
 }
 async function handleAdminUserAction(request, env, userId) {
@@ -1330,7 +1335,7 @@ async function handleAdminUserAction(request, env, userId) {
   if (!admin) return json({ ok: false, error: "Administrator access required" }, 403);
   const id = Number(userId);
   if (!Number.isSafeInteger(id) || id < 1) return json({ ok: false, error: "Invalid user ID" }, 400);
-  const target = await env.DB.prepare("SELECT u.id,u.email,u.is_banned,a.email AS admin_email FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email) WHERE u.id=? LIMIT 1").bind(id).first();
+  const target = await env.DB.prepare("SELECT u.id,u.email,u.is_banned,u.ban_reason,a.email AS admin_email FROM users u LEFT JOIN admin_allowlist a ON lower(a.email)=lower(u.email) WHERE u.id=? LIMIT 1").bind(id).first();
   if (!target) return json({ ok: false, error: "User not found" }, 404);
   if (Number(target.id) === Number(admin.id)) return json({ ok: false, error: "You cannot change or remove your own account" }, 403);
   if (target.admin_email) return json({ ok: false, error: "Administrator accounts are protected from user actions" }, 403);
@@ -1352,7 +1357,9 @@ async function handleAdminUserAction(request, env, userId) {
   const action = String(body.action || "");
   if (action === "ban" || action === "unban") {
     const banned = action === "ban" ? 1 : 0;
-    await env.DB.prepare("UPDATE users SET is_banned=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(banned,id).run();
+    const reason = banned ? clean(body.reason, 500) : "";
+    if (banned && !reason) return json({ ok: false, error: "A ban reason is required." }, 400);
+    await env.DB.prepare("UPDATE users SET is_banned=?,ban_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(banned,reason,id).run();
     if (banned) {
       await env.DB.prepare("DELETE FROM user_sessions WHERE user_id=?").bind(id).run();
       await env.DB.prepare("UPDATE products SET published=0,expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE uploader_id=? AND published=1").bind(id).run();
@@ -1360,7 +1367,7 @@ async function handleAdminUserAction(request, env, userId) {
       await env.DB.prepare("UPDATE promoters SET status='rejected' WHERE user_id=?").bind(id).run();
     }
     await logActivity(env, admin.id, banned ? "admin_user_banned" : "admin_user_unbanned", "user", id);
-    return json({ ok: true, user_id: id, is_banned: banned });
+    return json({ ok: true, user_id: id, is_banned: banned, ban_reason: reason });
   }
   if (action === "demote") {
     const promoter = await env.DB.prepare("SELECT id FROM promoters WHERE user_id=? AND status='approved' LIMIT 1").bind(id).first();
@@ -1404,12 +1411,15 @@ async function sendCommunityEmail(env, subject, body) {
 }
 async function handleAnnouncements(request, env) {
   if (request.method === "GET") {
-    const result = await env.DB.prepare("SELECT id, title, body, created_at FROM announcements ORDER BY id DESC LIMIT 100").all();
     const user = await currentUser(request, env);
+    await env.DB.prepare("DELETE FROM announcements WHERE created_at < datetime('now','-3 days')").run();
+    const result = user
+      ? await env.DB.prepare("SELECT id,title,body,created_at FROM announcements WHERE created_at >= datetime('now','-3 days') AND created_at >= ? ORDER BY id DESC LIMIT 100").bind(user.created_at || "1970-01-01 00:00:00").all()
+      : { results: [] };
     let unreadCount = 0;
     if (user) {
-      const globalUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM announcements a WHERE NOT EXISTS (SELECT 1 FROM announcement_reads r WHERE r.user_id=? AND r.announcement_id=a.id)").bind(user.id).first();
-      const noticeUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM login_notices n WHERE n.user_id=? AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.user_id=? AND r.notice_id=n.id)").bind(user.id,user.id).first();
+      const globalUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM announcements a WHERE a.created_at >= datetime('now','-3 days') AND a.created_at >= ? AND NOT EXISTS (SELECT 1 FROM announcement_reads r WHERE r.user_id=? AND r.announcement_id=a.id)").bind(user.created_at || "1970-01-01 00:00:00",user.id).first();
+      const noticeUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM login_notices n WHERE n.user_id=? AND n.title IN (?,?) AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.user_id=? AND r.notice_id=n.id)").bind(user.id,"Welcome to Shopper's Suggestions","New sign-in",user.id).first();
       unreadCount = Number(globalUnread?.count || 0) + Number(noticeUnread?.count || 0);
     }
     return json({ ok: true, announcements: result.results || [], unread_count: unreadCount });
@@ -1426,8 +1436,6 @@ async function handleAnnouncements(request, env) {
     catch (error) { console.error("Community email send failed", error); delivery = { configured: true, sent: 0, error: "provider_error" }; }
     await env.DB.prepare("UPDATE announcements SET email_sent = ? WHERE id = ?").bind(delivery.configured && delivery.sent > 0 ? 1 : 0, inserted.id).run();
   }
-  // Create an in-app notice for all existing users; the announcement itself remains globally visible too.
-  await env.DB.prepare("INSERT INTO login_notices (user_id, title, body) SELECT id, ?, ? FROM users WHERE is_banned = 0").bind(title, message).run();
   return json({ ok: true, announcement: inserted, email_requested: emailRequested, email_configured: !!delivery.configured, email_sent: !!delivery.configured && Number(delivery.sent || 0) > 0, email_count: Number(delivery.sent || 0), email_total: Number(delivery.total || 0) }, 201);
 }
 async function handleUserSearch(request, env) {
