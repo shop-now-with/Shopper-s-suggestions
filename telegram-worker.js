@@ -200,6 +200,22 @@ async function getPromoterTelegramLink(env, telegramUserId) {
     .bind(String(telegramUserId)).first();
 }
 
+async function verifyTelegramAdminAccount(env, chatId, telegramUserId) {
+  const link = await getPromoterTelegramLink(env, telegramUserId);
+  if (!link || String(link.chat_id) !== String(chatId)) return false;
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Accept": "application/json",
+      "Cache-Control": "no-cache"
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  return response.ok && data.ok === true && data.is_admin === true;
+}
+
 async function verifyPromoterApiKey(apiKey) {
   const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
     method: "POST",
@@ -1801,6 +1817,7 @@ async function handleTelegramUpdate(update, env) {
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Connect your promoter account first using /connect." });
       return;
     }
+    s.user_id = String(user.id);
     s.step = "title";
     s.data = { mode: "promoter", images: [] };
     await saveTelegramSession(env, s);
@@ -2074,62 +2091,39 @@ async function handleTelegramUpdate(update, env) {
       return;
     }
 
-    if (args) {
-      const expected = adminCode(env);
-      if (/^\d{4}$/.test(args) && expected && args === expected) {
-        await unlockTelegram(env, chatId, userId);
+    try {
+      const verified = await verifyTelegramAdminAccount(env, chatId, userId);
+      if (!verified) {
         await telegramApi(env, "sendMessage", {
           chat_id: chatId,
-          text:
-            `🔓 <b>Admin unlocked.</b>\n\n` +
-            `Your admin tools are now available.\n\n` +
-            `/addproduct\n` +
-            `/broadcast message\n` +
-            `/sendto CHAT_ID message\n` +
-            `/channel CHAT_ID message\n` +
-            `/chats\n` +
-            `/refreshchat CHAT_ID\n` +
-            `/stats\n` +
-            `/setadsqr — Set paid plan QR\n` +
-            `/showadsqr — View current QR\n` +
-            `/removeadsqr — Remove current QR\n` +
-            `/lock`,
-          parse_mode: "HTML"
+          text: "🔐 First connect the Shopper's Suggestions API key belonging to your admin website account with /connect. Then send /admin again."
         });
-      } else {
-        await telegramApi(env, "sendMessage", {
-          chat_id: chatId,
-          text: "❌ Invalid admin code."
-        });
+        return;
       }
-      return;
-    }
-
-    s.step = "admin_code";
-    s.data = {};
-    await saveTelegramSession(env, s);
-    await telegramApi(env, "sendMessage", {
-      chat_id: chatId,
-      text: `🔐 <b>Admin authentication</b>\n\nSend the 4-digit admin code.`,
-      parse_mode: "HTML"
-    });
-    return;
-  }
-
-  if (
-    !s.unlocked &&
-    s.step === "admin_code" &&
-    /^\d{4}$/.test(text) &&
-    isOwnerAdmin(env, chat, userId)
-  ) {
-    const expected = adminCode(env);
-    if (expected && text === expected) {
       await unlockTelegram(env, chatId, userId);
-      await sendHelp(env, chatId, true);
-    } else {
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "❌ Invalid admin code."
+        text:
+          `🔓 <b>Admin unlocked.</b>\n\n` +
+          `Verified using your Shopper's Suggestions website account.\n\n` +
+          `/addproduct\n` +
+          `/broadcast message\n` +
+          `/sendto CHAT_ID message\n` +
+          `/channel CHAT_ID message\n` +
+          `/chats\n` +
+          `/refreshchat CHAT_ID\n` +
+          `/stats\n` +
+          `/setadsqr — Set paid plan QR\n` +
+          `/showadsqr — View current QR\n` +
+          `/removeadsqr — Remove current QR\n` +
+          `/lock`,
+        parse_mode: "HTML"
+      });
+    } catch (error) {
+      console.error("Website API admin verification failed", String(error?.message || error));
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "⚠️ Could not verify your website account right now. Please try /admin again shortly."
       });
     }
     return;
@@ -2151,8 +2145,17 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  // Anything below this line is admin-only.
-  if (!s.unlocked || !isOwnerAdmin(env, chat, userId)) {
+  // Promoter product drafts are normal-user actions, not admin commands.
+  // Allow only the active private-chat draft owner to continue the upload flow.
+  const promoterUploadActive =
+    chat?.type === "private" &&
+    !!user?.id &&
+    String(s.user_id) === String(userId) &&
+    s.data?.mode === "promoter" &&
+    ["title", "description", "affiliate", "images", "confirm"].includes(s.step);
+
+  // Anything below this line is admin-only, except messages continuing that promoter draft.
+  if ((!s.unlocked || !isOwnerAdmin(env, chat, userId)) && !promoterUploadActive) {
     if (text.startsWith("/")) {
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
