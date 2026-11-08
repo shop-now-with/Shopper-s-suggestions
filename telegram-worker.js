@@ -2145,7 +2145,7 @@ async function handleTelegramUpdate(update, env) {
       }
       await unlockTelegram(env, chatId, userId);
       await setTelegramCommandMenu(env, adminBotCommands(), {
-        type: "chat_member", chat_id: chatId, user_id: userId
+        type: "chat", chat_id: chatId
       });
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
@@ -2188,7 +2188,7 @@ async function handleTelegramUpdate(update, env) {
     }
     await lockTelegram(env, chatId, userId);
     await setTelegramCommandMenu(env, publicBotCommands(), {
-      type: "chat_member", chat_id: chatId, user_id: userId
+      type: "chat", chat_id: chatId
     });
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
