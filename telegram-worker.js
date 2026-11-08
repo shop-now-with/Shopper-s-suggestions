@@ -754,6 +754,56 @@ function isOwnerAdmin(env, chat, userId) {
   );
 }
 
+function publicBotCommands() {
+  return [
+    { command: "help", description: "See available commands" },
+    { command: "explain", description: "Learn affiliate marketing step by step" },
+    { command: "start", description: "Open the bot" },
+    { command: "connect", description: "Connect your promoter account" },
+    { command: "profile", description: "View your connected profile" },
+    { command: "products", description: "Browse live products" },
+    { command: "latest", description: "See newest products" },
+    { command: "search", description: "Search products" },
+    { command: "categories", description: "Browse product categories" },
+    { command: "featured", description: "See featured products" },
+    { command: "addproduct", description: "Upload a product" },
+    { command: "myproducts", description: "View your products" },
+    { command: "editproduct", description: "Edit your product" },
+    { command: "deleteproduct", description: "Delete your product" },
+    { command: "disconnect", description: "Disconnect your account" },
+    { command: "adsrun", description: "Set up product promotions" },
+    { command: "adsverify", description: "Verify this group for ads" },
+    { command: "myid", description: "Show your Telegram ID" },
+    { command: "cancel", description: "Cancel the current action" }
+  ];
+}
+function adminBotCommands() {
+  return [...publicBotCommands(),
+    { command: "admin", description: "Unlock admin tools" },
+    { command: "lock", description: "Lock admin tools" },
+    { command: "broadcast", description: "Message all registered chats" },
+    { command: "globalgroupmsg", description: "Message all groups and channels" },
+    { command: "globalusermsg", description: "Message all private users" },
+    { command: "sendto", description: "Send a message to a chat ID" },
+    { command: "channel", description: "Send a message to a group or channel" },
+    { command: "chats", description: "List registered chats" },
+    { command: "refreshchat", description: "Register or refresh a chat" },
+    { command: "stats", description: "Show bot statistics" },
+    { command: "paymentdts", description: "Review paid-plan payments" },
+    { command: "setadsqr", description: "Set the paid-plan QR image" },
+    { command: "showadsqr", description: "Show the current payment QR" },
+    { command: "removeadsqr", description: "Remove the payment QR" }
+  ];
+}
+async function setTelegramCommandMenu(env, commands, scope) {
+  try {
+    const payload = { commands };
+    if (scope) payload.scope = scope;
+    await telegramApi(env, "setMyCommands", payload);
+  } catch (error) {
+    console.error("Could not update Telegram command menu", String(error?.message || error));
+  }
+}
 async function sendHelp(env, chatId) {
   const text =
     `🛍️ <b>Shopper's Suggestions</b>\n\n` +
@@ -869,7 +919,7 @@ async function sendFeedbackToOwner(env, chat, user, kind, message) {
   return true;
 }
 
-async function broadcastToTelegram(env, message) {
+async function broadcastToTelegram(env, message, allowedTypes = null) {
   const rows = await env.DB.prepare(`
     SELECT chat_id, type, title, username
     FROM telegram_chats
@@ -880,9 +930,11 @@ async function broadcastToTelegram(env, message) {
   const targets = [];
   const seen = new Set();
 
+  const allowed = Array.isArray(allowedTypes) ? new Set(allowedTypes) : null;
   for (const row of rows.results || []) {
     const id = String(row.chat_id || "");
     if (!id || seen.has(id)) continue;
+    if (allowed && !allowed.has(String(row.type || ""))) continue;
     seen.add(id);
     targets.push(row);
   }
@@ -1827,15 +1879,7 @@ async function handleTelegramUpdate(update, env) {
 
   if (command === "start") {
     try {
-      await telegramApi(env, "setMyCommands", {
-        commands: [
-          { command: "help", description: "See every available command" },
-          { command: "explain", description: "Learn affiliate marketing step by step" }
-        ]
-      });
-    } catch (error) {
-      console.error("Could not refresh Telegram command menu", error);
-    }
+      await setTelegramCommandMenu(env, publicBotCommands());
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text:
@@ -2101,22 +2145,28 @@ async function handleTelegramUpdate(update, env) {
         return;
       }
       await unlockTelegram(env, chatId, userId);
+      await setTelegramCommandMenu(env, adminBotCommands(), {
+        type: "chat_member", chat_id: chatId, user_id: userId
+      });
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
           `🔓 <b>Admin unlocked.</b>\n\n` +
           `Verified using your Shopper's Suggestions website account.\n\n` +
           `/addproduct\n` +
-          `/broadcast message\n` +
+          `/broadcast message — Message all chats\n` +
+          `/globalgroupmsg message — Message all groups/channels\n` +
+          `/globalusermsg message — Message all private users\n` +
           `/sendto CHAT_ID message\n` +
           `/channel CHAT_ID message\n` +
-          `/chats\n` +
+          `/chats — List registered chats\n` +
           `/refreshchat CHAT_ID\n` +
-          `/stats\n` +
+          `/stats — Show bot statistics\n` +
+          `/paymentdts — Review payment requests\n` +
           `/setadsqr — Set paid plan QR\n` +
           `/showadsqr — View current QR\n` +
           `/removeadsqr — Remove current QR\n` +
-          `/lock`,
+          `/lock — Lock admin tools`,
         parse_mode: "HTML"
       });
     } catch (error) {
@@ -2138,6 +2188,9 @@ async function handleTelegramUpdate(update, env) {
       return;
     }
     await lockTelegram(env, chatId, userId);
+    await setTelegramCommandMenu(env, publicBotCommands(), {
+      type: "chat_member", chat_id: chatId, user_id: userId
+    });
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text: "🔒 Admin tools locked."
@@ -2181,6 +2234,23 @@ async function handleTelegramUpdate(update, env) {
   if (command === "removeadsqr") {
     await env.DB.prepare("DELETE FROM telegram_ads_settings WHERE setting_key='payment_qr'").run();
     await telegramApi(env,"sendMessage",{chat_id:chatId,text:"✅ Paid Ads QR removed."});
+    return;
+  }
+
+  if (command === "globalgroupmsg" || command === "globalusermsg") {
+    if (!args) {
+      const example = command === "globalgroupmsg" ? "/globalgroupmsg New community update!" : "/globalusermsg A new update is available!";
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 Add your message after the command.\n\nExample:\n<code>" + escapeHtml(example) + "</code>", parse_mode: "HTML" });
+      return;
+    }
+    const groupsOnly = command === "globalgroupmsg";
+    const result = await broadcastToTelegram(env, args, groupsOnly ? ["group", "supergroup", "channel"] : ["private"]);
+    await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: (groupsOnly ? "📣 <b>Group/channel broadcast finished</b>" : "📨 <b>Private-user broadcast finished</b>") +
+        "\n\n🎯 Targets: " + result.total + "\n✅ Sent: " + result.sent + "\n❌ Failed: " + result.failed,
+      parse_mode: "HTML"
+    });
     return;
   }
 
@@ -2295,6 +2365,49 @@ async function handleTelegramUpdate(update, env) {
         parse_mode: "HTML"
       });
     }
+    return;
+  }
+
+  if (command === "paymentdts") {
+    const action = args.match(/^(approve|reject)\s+(\d+)$/i);
+    if (action) {
+      try {
+        const approve = action[1].toLowerCase() === "approve";
+        const result = await reviewAdsPayment(env, Number(action[2]), userId, approve);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: approve ? "✅ Payment #" + action[2] + " approved until " + result.until + "." : "❌ Payment #" + action[2] + " rejected." });
+      } catch (error) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⚠️ " + escapeTelegramHtml(error.message || "Could not review payment."), parse_mode: "HTML" });
+      }
+      return;
+    }
+    const payments = await env.DB.prepare("SELECT p.id,p.telegram_user_id,p.chat_id,p.utr,p.status,p.created_at,p.paid_until,COALESCE(c.title,c.username,'Telegram user') AS account_name FROM telegram_ads_payments p LEFT JOIN telegram_chats c ON c.chat_id=p.chat_id ORDER BY CASE WHEN p.status='pending' THEN 0 ELSE 1 END,p.created_at DESC LIMIT 20").all();
+    const rows = payments.results || [];
+    const pending = rows.filter(row => row.status === "pending");
+    await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: "💳 <b>Paid Ads payment requests</b>\n\nPending: " + pending.length +
+        "\nShowing up to " + rows.length + " recent request(s)." +
+        (pending.length ? "\nUse buttons or /paymentdts approve ID /paymentdts reject ID." : "\nNo pending payment requests.") +
+        "\n\nQR tools: /setadsqr, /showadsqr, /removeadsqr",
+      parse_mode: "HTML"
+    });
+    for (const row of rows) {
+      const details = "💳 <b>Payment #" + Number(row.id) + "</b>\n" +
+        "👤 " + escapeTelegramHtml(row.account_name || "Telegram user") + "\n" +
+        "🆔 <code>" + escapeHtml(row.telegram_user_id) + "</code>\n" +
+        "🔢 UTR: <code>" + escapeHtml(row.utr) + "</code>\n" +
+        "📅 " + escapeTelegramHtml(row.created_at || "") + "\n" +
+        "Status: <b>" + escapeTelegramHtml(String(row.status || "unknown").toUpperCase()) + "</b>" +
+        (row.paid_until ? "\nPaid until: " + escapeTelegramHtml(row.paid_until) : "");
+      const markup = row.status === "pending" ? { inline_keyboard: [[
+        { text: "✅ Approve 30 days", callback_data: "adsapprove:" + row.id },
+        { text: "❌ Reject", callback_data: "adsreject:" + row.id }
+      ]] } : undefined;
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: details, parse_mode: "HTML", ...(markup ? { reply_markup: markup } : {}) });
+    }
+    const qr = await getAdsQr(env);
+    if (qr) await telegramApi(env, "sendPhoto", { chat_id: chatId, photo: qr, caption: "Current Paid Ads payment QR." });
+    else await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⚠️ No payment QR configured. Use /setadsqr." });
     return;
   }
 
@@ -2746,12 +2859,7 @@ async function setupTelegramWebhook(request, env) {
   };
   if (cleanText(env.TELEGRAM_WEBHOOK_SECRET)) payload.secret_token = cleanText(env.TELEGRAM_WEBHOOK_SECRET);
   const result = await telegramApi(env, "setWebhook", payload);
-  await telegramApi(env, "setMyCommands", {
-    commands: [
-      { command: "help", description: "See every available command" },
-      { command: "explain", description: "Learn affiliate marketing step by step" }
-    ]
-  });
+  await setTelegramCommandMenu(env, publicBotCommands());
   return json({ ok: true, telegram: result.ok, webhook: publicWebhook });
 }
 
