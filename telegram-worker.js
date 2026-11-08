@@ -270,8 +270,24 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
     throw new Error(`Website publish failed (HTTP ${response.status}): ${detail}`);
   }
 
-  const telegramResult = await postProductToTelegramGroups(product, env);
-  await resetTelegramProductDraft(env, chatId);
+  let telegramResult;
+  try {
+    telegramResult = await postProductToTelegramGroups(product, env, telegramUserId);
+  } catch (error) {
+    // The listing is already published. A Telegram outage must not turn that
+    // successful website publish into a misleading publish failure.
+    console.error("Product published but Telegram delivery could not start", {
+      product_id: String(product.id),
+      telegram_user_id: String(telegramUserId),
+      error: String(error?.message || error)
+    });
+    telegramResult = {
+      sent: 0, total: 0, groups: [],
+      failures: [{ chat_id: "", error: String(error?.message || error) }]
+    };
+  }
+  try { await resetTelegramProductDraft(env, chatId); }
+  catch (error) { console.error("Could not reset product draft after publish", error); }
   return { product, telegramResult };
 }
 
@@ -491,74 +507,74 @@ async function sendProductMediaToTelegram(env, chatId, product) {
   const images = productImages(product);
   const caption = telegramCaption(product);
   const markup = productButton(product);
+  let deliveredImage = false;
 
-  if (images.length) {
-    await telegramSendWithRetry(env, "sendPhoto", {
-      chat_id: chatId,
-      photo: images[0],
-      caption,
-      parse_mode: "HTML",
-      reply_markup: markup
-    });
-
-    for (const image of images.slice(1)) {
-      await telegramSendWithRetry(env, "sendPhoto", {
-        chat_id: chatId,
-        photo: image
+  // Broken or non-direct image URLs must not block delivery of the product itself.
+  for (const image of images) {
+    try {
+      const payload = { chat_id: chatId, photo: image };
+      if (!deliveredImage) {
+        payload.caption = caption;
+        payload.parse_mode = "HTML";
+        payload.reply_markup = markup;
+      }
+      await telegramSendWithRetry(env, "sendPhoto", payload);
+      deliveredImage = true;
+    } catch (error) {
+      console.error("Product image delivery failed; trying remaining images", {
+        chat_id: String(chatId),
+        product_id: String(product?.id || ""),
+        error: String(error?.message || error)
       });
     }
-
-    if (product.video_url) {
-      await telegramSendWithRetry(env, "sendVideo", {
-        chat_id: chatId,
-        video: product.video_url,
-        reply_markup: markup
-      });
-    }
-
-    return;
   }
 
-  if (product.video_url) {
-    await telegramSendWithRetry(env, "sendVideo", {
+  if (!deliveredImage) {
+    await telegramSendWithRetry(env, "sendMessage", {
       chat_id: chatId,
-      video: product.video_url,
-      caption,
+      text: "✨ <b>CHECK IT OUT!</b> ✨\n\n" + caption,
       parse_mode: "HTML",
+      disable_web_page_preview: false,
       reply_markup: markup
     });
-    return;
   }
-
-  await telegramSendWithRetry(env, "sendMessage", {
-    chat_id: chatId,
-    text: "✨ <b>CHECK IT OUT!</b> ✨\n\n" + caption,
-    parse_mode: "HTML",
-    disable_web_page_preview: false,
-    reply_markup: markup
-  });
 }
 
-async function postProductToTelegramGroups(product, env) {
+async function postProductToTelegramGroups(product, env, telegramUserId = "") {
   const targets = telegramGroupIds(env);
-  if (!targets.length) return { sent: 0, groups: [], failures: [] };
+
+  // Deliver a promoter's new listing to their verified groups too.
+  if (telegramUserId) {
+    const verified = await env.DB.prepare(
+      "SELECT chat_id FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1 ORDER BY verified_at"
+    ).bind(String(telegramUserId)).all();
+    for (const row of verified.results || []) {
+      if (row.chat_id) targets.push(String(row.chat_id));
+    }
+  }
+
+  const uniqueTargets = [...new Set(targets.filter(Boolean))];
+  if (!uniqueTargets.length) {
+    return {
+      sent: 0,
+      total: 0,
+      groups: [],
+      failures: [],
+      message: "No Telegram destination is configured or verified yet."
+    };
+  }
 
   const sent = [];
   const failures = [];
-
-  for (const chatId of [...new Set(targets)]) {
+  for (const chatId of uniqueTargets) {
     try {
       await sendProductMediaToTelegram(env, chatId, product);
       sent.push(chatId);
     } catch (error) {
-      failures.push({
-        chat_id: chatId,
-        error: String(error.message || error)
-      });
+      failures.push({ chat_id: chatId, error: String(error?.message || error) });
     }
   }
-
-  return { sent: sent.length, groups: sent, failures };
+  return { sent: sent.length, total: uniqueTargets.length, groups: sent, failures };
 }
 
 async function recordTelegramChat(env, chat) {
@@ -2413,26 +2429,35 @@ async function handleTelegramUpdate(update, env) {
       const created = s.data?.mode === "promoter"
         ? await createPromoterProductFromTelegramSession(env, chatId, userId)
         : await createProductFromTelegramSession(env, chatId);
+      const delivery = created.telegramResult || {};
+      const deliveryLine = Number(delivery.sent || 0) > 0
+        ? `📣 Delivered to ${delivery.sent}/${delivery.total || delivery.sent} Telegram group(s).`
+        : "⚠️ Saved on the website, but not delivered to Telegram yet.";
+      const failureLine = delivery.failures?.length
+        ? `\\n⚠️ ${delivery.failures.length} group(s) could not receive it. Check the bot's posting permissions.`
+        : "";
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
-          `🎉 <b>Product #${created.product.id} published.</b>\n\n` +
-          (created.telegramResult.failures?.length
-            ? `⚠️ Some group/channel posts failed.`
-            : `📣 Group/channel posting complete.`) +
-          `\n\nUse /addproduct for another product.`,
-        parse_mode: "HTML"
+          `🎉 <b>Product #${created.product.id} published.</b>\\n\\n` +
+          deliveryLine + failureLine +
+          `\\n\\nWebsite link: ${productShareUrl(created.product.id)}` +
+          `\\nUse /addproduct for another product.`,
+        parse_mode: "HTML",
+        disable_web_page_preview: true
       });
     } catch (error) {
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
-          `❌ Could not publish.\n\n` +
+          `❌ Could not publish.\\n\\n` +
           `${escapeTelegramHtml(error.message || "Unknown error")}`,
         parse_mode: "HTML"
       });
     }
   }
+
+
 }
 
 
