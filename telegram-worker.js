@@ -2150,9 +2150,11 @@ async function handleTelegramUpdate(update, env) {
   const promoterUploadActive =
     chat?.type === "private" &&
     !!user?.id &&
-    String(s.user_id) === String(userId) &&
+    // Telegram private-chat IDs equal the user's ID. Use that stable identity
+    // instead of the mutable session user_id, which can be stale after reconnects.
+    String(chatId) === String(userId) &&
     s.data?.mode === "promoter" &&
-    ["title", "description", "affiliate", "images", "confirm"].includes(s.step);
+    ["title", "description", "affiliate", "category", "images", "video", "confirm"].includes(s.step);
 
   // Anything below this line is admin-only, except messages continuing that promoter draft.
   if ((!s.unlocked || !isOwnerAdmin(env, chat, userId)) && !promoterUploadActive) {
@@ -2429,6 +2431,26 @@ async function handleTelegramUpdate(update, env) {
       chat_id: chatId,
       text: "📂 Choose a category:",
       reply_markup: categoryKeyboard()
+    });
+    return;
+  }
+
+  if (s.step === "category") {
+    const category = CATEGORIES.find(item => item.toLowerCase() === text.toLowerCase());
+    if (!category) {
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "Please choose a category using the buttons, or send one of the listed category names.",
+        reply_markup: categoryKeyboard()
+      });
+      return;
+    }
+    s.data.category = category;
+    s.step = "images";
+    await saveTelegramSession(env, s);
+    await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: "Category selected: " + category + "\n\nSend up to 5 direct image URLs (https://...). Type done when finished, or skip to continue without images."
     });
     return;
   }
