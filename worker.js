@@ -807,7 +807,7 @@ async function handleIntegrationProduct(request, env) {
   if (!adminRow && !promoter) return json({ ok: false, error: "An approved promoter account is required" }, 403);
   if (request.method === "GET") {
     const rows = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.uploader_id=? ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 100`).bind(owner.id).all();
-    return json({ ok: true, products: (rows.results || []).map(productPublic) });
+    return json({ ok: true, is_admin: !!adminRow, products: (rows.results || []).map(productPublic) });
   }
   if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
   let body;
