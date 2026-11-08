@@ -1878,8 +1878,7 @@ async function handleTelegramUpdate(update, env) {
   }
 
   if (command === "start") {
-    try {
-      await setTelegramCommandMenu(env, publicBotCommands());
+    await setTelegramCommandMenu(env, publicBotCommands());
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text:
