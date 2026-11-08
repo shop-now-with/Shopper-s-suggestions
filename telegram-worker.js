@@ -86,6 +86,8 @@ CREATE TABLE IF NOT EXISTS telegram_ads_accounts (telegram_user_id TEXT PRIMARY 
 CREATE TABLE IF NOT EXISTS telegram_ads_product_cycles (telegram_user_id TEXT NOT NULL, product_id TEXT NOT NULL, sent_count INTEGER NOT NULL DEFAULT 0, cooldown_until TEXT, last_sent_at TEXT, PRIMARY KEY (telegram_user_id, product_id));
 CREATE TABLE IF NOT EXISTS telegram_ads_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id TEXT NOT NULL, chat_id TEXT NOT NULL, utr TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, paid_until TEXT);
 CREATE TABLE IF NOT EXISTS telegram_ads_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS telegram_ai_daily_usage (usage_date TEXT PRIMARY KEY, requests INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS telegram_ai_user_daily_usage (usage_date TEXT NOT NULL, telegram_user_id TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (usage_date, telegram_user_id));
 `;
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -740,8 +742,9 @@ async function sendHelp(env, chatId) {
   const text =
     `🛍️ <b>Shopper's Suggestions</b>\n\n` +
     `Connect your promoter account to manage your products directly from Telegram.\n\n` +
+    `/help — See every available command\n` +
+    `/explain — Learn affiliate marketing step by step\n` +
     `/start — Open the bot\n` +
-    `/help — Show instructions\n` +
     `/connect — Connect your account\n` +
     `/profile — View your full profile 👤\n` +
     `/products — Browse live products 🛍️\n` +
@@ -764,6 +767,55 @@ async function sendHelp(env, chatId) {
     parse_mode: "HTML",
     disable_web_page_preview: true
   });
+}
+
+
+const EXPLAIN_AI_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+const EXPLAIN_GLOBAL_DAILY_LIMIT = 25;
+const EXPLAIN_USER_DAILY_LIMIT = 5;
+const EXPLAIN_SYSTEM_PROMPT = "You are the friendly, practical learning assistant inside the Shopper's Suggestions Telegram bot.\nTeach beginners affiliate marketing and explain how the Shopper's Suggestions website and Telegram promotion bot work. Write for Telegram: short paragraphs, clear headings, numbered steps, simple English, concise messages. Never guarantee income.\nIDENTITY: Shopper's Suggestions is operated by MEGFO, a brand that creates websites and applications. If asked who owns or operates this service, say MEGFO. Do not claim MEGFO created the underlying AI model and do not name or claim to represent an AI model provider.\nWEBSITE: https://shopperssuggestions.online. Shopper's Suggestions is a product-discovery and affiliate marketplace, not a shop that owns or ships products. Promoters publish product listings with descriptions, categories, images and affiliate/product links. Visitors discover products and use the product page to visit the retailer. The retailer handles the order and delivery. Promoters manage their own products after connecting an approved promoter account to this Telegram bot. The promoter must first upload/publish the product on the website before the Telegram ads scheduler can promote it. In Telegram, /connect links an approved promoter account and /addproduct starts an upload.\nAFFILIATE BASICS: A promoter shares a special tracked link; if someone makes a qualifying purchase through it, the affiliate programme may credit a commission. Tracking, retailer approval, returns, cancellations, exclusions and programme rules matter. Earnings are not guaranteed.\nEARNKARO: A person joins EarnKaro, chooses a retailer/deal, creates a Profit Link using the retailer product URL and EarnKaro's Make Links flow, then shares the tracked link. Commission may first show as pending and is confirmed only after retailer validation. Returned, cancelled, rejected or untracked orders may not qualify. Never promise a fixed commission or payout time.\nAGE AND PERMISSION: EarnKaro's terms say members should be 18 or older; people under 18 may access only with guidance and supervision of a parent or legal guardian. If the learner is under 18, clearly tell them not to create an account, submit identity/bank details, or handle payments alone. Ask a parent/legal guardian to review the current terms and supervise any permitted activity. Never suggest using a false age or bypassing age checks.\nPRODUCT SELECTION: Teach how to select products people genuinely need: useful problem-solving value, fair price, reliable retailer, good recent reviews, clear product information/images, a real current deal, and an appropriate category. Encourage checking availability and retailer terms. Avoid fake discounts, false scarcity, copied claims, misleading images or exaggerated promises. Help write short honest captions with product benefit, key details and a clear call to action.\nTELEGRAM GROUP PROMOTION: In the middle of the learning journey, explain that the free bot plan initially supports up to 3 verified Telegram groups/supergroups. The promoter must be an admin of each group, add this bot as an admin with only the permissions needed to post, then run /adsverify inside that group. They may invite friends or contacts only if those people agree to join; never spam or add people without consent. The free scheduler sends eligible product ads about every 60 minutes. The system allows another batch of up to 3 groups after 20 days, while previously verified groups remain active. Only products already published on https://shopperssuggestions.online can be promoted.\nPAID PLAN: There is an optional bot paid plan priced at ₹150 for 30 days, subject to admin approval, with a faster schedule. Explain it only as a separate bot service. IMPORTANT: EarnKaro terms restrict paid advertising that directs traffic to retailers through EarnKaro. Do not recommend buying the bot paid plan to promote EarnKaro Profit Links unless EarnKaro and the retailer explicitly confirm that this exact promotion is permitted. Prefer the free plan for EarnKaro links and always tell the learner to check current programme terms.\nLESSON STYLE: When /explain starts, give a beginner-friendly guided course: what affiliate marketing is; what EarnKaro does; age/guardian requirements; how to make a Profit Link; how to select a good product; how to write honest promotional content; how Shopper's Suggestions works; how to publish a product on the website; and, around the middle of the lesson, how to create and verify up to 3 Telegram groups safely. End by asking one simple question to continue the lesson. Answer follow-up questions using the conversation history. If uncertain about current EarnKaro rules, say to check the official current terms rather than guessing.";
+
+async function reserveExplainAiRequest(env, telegramUserId) {
+  const day = new Date().toISOString().slice(0, 10);
+  const global = await env.DB.prepare("INSERT INTO telegram_ai_daily_usage (usage_date, requests) VALUES (?, 1) ON CONFLICT(usage_date) DO UPDATE SET requests = requests + 1 WHERE requests < ?").bind(day, EXPLAIN_GLOBAL_DAILY_LIMIT).run();
+  if (!(Number(global.meta?.changes) > 0)) return false;
+  const personal = await env.DB.prepare("INSERT INTO telegram_ai_user_daily_usage (usage_date, telegram_user_id, requests) VALUES (?, ?, 1) ON CONFLICT(usage_date, telegram_user_id) DO UPDATE SET requests = requests + 1 WHERE requests < ?").bind(day, String(telegramUserId), EXPLAIN_USER_DAILY_LIMIT).run();
+  if (!(Number(personal.meta?.changes) > 0)) {
+    await env.DB.prepare("UPDATE telegram_ai_daily_usage SET requests = CASE WHEN requests > 0 THEN requests - 1 ELSE 0 END WHERE usage_date = ?").bind(day).run();
+    return false;
+  }
+  return true;
+}
+
+async function sendExplainAiReply(env, session, chatId, telegramUserId, userText, isFirst = false) {
+  if (!env.AI || typeof env.AI.run !== "function") {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "The learning assistant is being connected. Please try /explain again a little later." });
+    return;
+  }
+  const reserved = await reserveExplainAiRequest(env, telegramUserId);
+  if (!reserved) {
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Today's free AI lesson allowance has been reached. Please try again tomorrow. Your lesson progress is saved." });
+    return;
+  }
+  const history = Array.isArray(session.data?.explain_history) ? session.data.explain_history.slice(-8) : [];
+  const messages = [
+    { role: "system", content: EXPLAIN_SYSTEM_PROMPT },
+    ...history,
+    { role: "user", content: cleanText(userText, 1500) }
+  ];
+  try {
+    const result = await env.AI.run(EXPLAIN_AI_MODEL, { messages, max_tokens: 400, temperature: 0.55 });
+    const answer = cleanText(result?.response || result?.output_text || result?.choices?.[0]?.message?.content || "", 3500);
+    if (!answer) throw new Error("The AI service returned an empty reply.");
+    session.data = session.data || {};
+    session.data.explain_history = [...history, { role: "user", content: cleanText(userText, 1500) }, { role: "assistant", content: answer }].slice(-8);
+    await saveTelegramSession(env, session);
+    const finalText = (isFirst ? "you are ready to make some money?\n\n" : "") + answer;
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: finalText.slice(0, 3900), disable_web_page_preview: true });
+  } catch (error) {
+    console.error("Affiliate lesson AI request failed", String(error?.message || error));
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "The free AI service is temporarily unavailable or has reached its daily allowance. Your lesson is still open—please try again later." });
+  }
 }
 
 async function sendFeedbackToOwner(env, chat, user, kind, message) {
@@ -1575,6 +1627,25 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
+
+  if (command === "explain") {
+    if (chat?.type !== "private" || !user?.id) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Please open a private chat with the bot and use /explain there." });
+      return;
+    }
+    s.step = "explain_chat";
+    s.data = { explain_history: [] };
+    await saveTelegramSession(env, s);
+    await sendExplainAiReply(env, s, chatId, userId, "Start my beginner-friendly affiliate marketing lesson. Include the website and explain the first steps.", true);
+    return;
+  }
+
+  if (s.step === "explain_chat" && text && !text.startsWith("/")) {
+    if (chat?.type !== "private" || !user?.id) return;
+    await sendExplainAiReply(env, s, chatId, userId, text, false);
+    return;
+  }
+
   if (command === "cancel") {
     await resetTelegramProductDraft(env, chatId);
     s.step = "idle";
@@ -1740,24 +1811,8 @@ async function handleTelegramUpdate(update, env) {
     try {
       await telegramApi(env, "setMyCommands", {
         commands: [
-          { command: "start", description: "Open the bot" },
-          { command: "help", description: "Show instructions" },
-          { command: "connect", description: "Connect your account" },
-          { command: "profile", description: "View your profile" },
-          { command: "products", description: "Browse live products" },
-          { command: "latest", description: "See newest products" },
-          { command: "search", description: "Search products" },
-          { command: "categories", description: "Browse categories" },
-          { command: "featured", description: "View featured products" },
-          { command: "addproduct", description: "Upload a product" },
-          { command: "myproducts", description: "View your products" },
-          { command: "editproduct", description: "Edit your product" },
-          { command: "deleteproduct", description: "Delete your product" },
-          { command: "disconnect", description: "Disconnect your account" },
-          { command: "adsrun", description: "Set up product promotions" },
-          { command: "adsverify", description: "Verify this group for ads" },
-          { command: "myid", description: "Show your Telegram user ID" },
-          { command: "cancel", description: "Cancel the current action" }
+          { command: "help", description: "See every available command" },
+          { command: "explain", description: "Learn affiliate marketing step by step" }
         ]
       });
     } catch (error) {
@@ -1767,8 +1822,9 @@ async function handleTelegramUpdate(update, env) {
       chat_id: chatId,
       text:
         `👋 <b>Welcome to Shopper's Suggestions!</b>\n\n` +
-        `Connect your promoter account with /connect, then manage your listings using /addproduct, /myproducts, /editproduct and /deleteproduct.\n\n` +
-        `Use /help to see the available commands.`,
+        `🌐 <a href="https://shopperssuggestions.online">Shopper Suggestions</a> is a product-discovery and affiliate platform. Promoters publish product listings on the website; visitors discover them and visit the retailer through the product link. The retailer handles orders and delivery.\n\n` +
+        `Use /help to see every bot command, or /explain for a step-by-step affiliate marketing lesson.\n\n` +
+        `To manage your own listings, connect your approved promoter account with /connect.`,
       parse_mode: "HTML"
     });
     return;
@@ -2666,23 +2722,8 @@ async function setupTelegramWebhook(request, env) {
   const result = await telegramApi(env, "setWebhook", payload);
   await telegramApi(env, "setMyCommands", {
     commands: [
-      { command: "start", description: "Open the bot" },
-      { command: "help", description: "Show instructions" },
-      { command: "connect", description: "Connect your account" },
-      { command: "profile", description: "View your profile" },
-      { command: "products", description: "Browse live products" },
-      { command: "latest", description: "See newest products" },
-      { command: "search", description: "Search products" },
-      { command: "categories", description: "Browse categories" },
-      { command: "featured", description: "View featured products" },
-      { command: "addproduct", description: "Upload a product" },
-      { command: "myproducts", description: "View your products" },
-      { command: "editproduct", description: "Edit your product" },
-      { command: "deleteproduct", description: "Delete your product" },
-      { command: "disconnect", description: "Disconnect your account" },
-      { command: "adsrun", description: "Set up product promotions" },
-      { command: "myid", description: "Show your Telegram user ID" },
-      { command: "cancel", description: "Cancel the current action" }
+      { command: "help", description: "See every available command" },
+      { command: "explain", description: "Learn affiliate marketing step by step" }
     ]
   });
   return json({ ok: true, telegram: result.ok, webhook: publicWebhook });
