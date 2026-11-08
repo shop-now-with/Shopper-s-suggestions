@@ -223,51 +223,75 @@ async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey) {
 
 async function createPromoterProductFromTelegramSession(env, chatId, telegramUserId) {
   const link = await getPromoterTelegramLink(env, telegramUserId);
-  if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Connect your promoter account first using /connect.");
-  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
-  const d = (await getTelegramSession(env, chatId, telegramUserId)).data || {};
-  const body = {
-    title: cleanText(d.title, 300),
-    description: cleanText(d.description, 10000),
-    affiliate_url: cleanText(d.affiliate_url, 2000),
-    category: cleanText(d.category, 100)
-  };
-  (Array.isArray(d.images) ? d.images : []).slice(0, 5).forEach((url, i) => body[`image${i + 1}_url`] = url);
-
-  const endpoint = "https://shopperssuggestions.online/api/integrations/products";
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      "Cache-Control": "no-cache"
-    },
-    body: JSON.stringify(body)
-  });
-  const responseText = await response.text();
-  let result = {};
-  try { result = responseText ? JSON.parse(responseText) : {}; } catch {}
-
-  let product = result.product || null;
-  if (response.ok && result.ok && !product) {
-    // Recover safely if the product was inserted but the response body was incomplete.
-    const check = await fetch(endpoint, {
-      headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json", "Cache-Control": "no-cache" }
-    });
-    const checkText = await check.text();
-    let checkData = {};
-    try { checkData = checkText ? JSON.parse(checkText) : {}; } catch {}
-    const rows = Array.isArray(checkData.products) ? checkData.products : [];
-    product = rows.find(p =>
-      String(p.title || "").trim() === body.title &&
-      String(p.affiliate_url || p.affiliate_link || "") === body.affiliate_url &&
-      (!p.created_at || Date.now() - Date.parse(String(p.created_at).replace(" ", "T") + "Z") < 5 * 60 * 1000)
-    ) || null;
+  if (!link || String(link.chat_id) !== String(chatId)) {
+    throw new Error("Connect your promoter account first using /connect.");
   }
-  if (!response.ok || !result.ok || !product) {
-    const detail = String(result.error || responseText || "The product endpoint returned no product record.").replace(/<[^>]*>/g, " ").slice(0, 700);
-    throw new Error(`Website publish failed (HTTP ${response.status}): ${detail}`);
+
+  const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+  const endpoint = "https://shopperssuggestions.online/api/integrations/products";
+  const session = await getTelegramSession(env, chatId, telegramUserId);
+  session.user_id = String(telegramUserId);
+  const d = session.data || {};
+  const headers = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Accept": "application/json",
+    "Cache-Control": "no-cache"
+  };
+
+  let product = null;
+
+  // If Telegram retried a publish after a delivery or reply issue, reuse the
+  // already-created website listing instead of creating a duplicate.
+  if (d.created_product_id) {
+    const check = await fetch(endpoint, { headers });
+    const checkData = await check.json().catch(() => ({}));
+    if (!check.ok || !checkData.ok) {
+      throw new Error(checkData.error || "Could not verify the existing listing. Please use /myproducts before trying again.");
+    }
+    product = (checkData.products || []).find(p =>
+      String(p.id) === String(d.created_product_id)
+    ) || null;
+    if (!product) delete d.created_product_id;
+  }
+
+  if (!product) {
+    const body = {
+      title: cleanText(d.title, 300),
+      description: cleanText(d.description, 10000),
+      affiliate_url: cleanText(d.affiliate_url, 2000),
+      category: cleanText(d.category, 100)
+    };
+    (Array.isArray(d.images) ? d.images : []).slice(0, 5).forEach((url, i) => {
+      body[`image${i + 1}_url`] = url;
+    });
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const responseText = await response.text();
+    let result = {};
+    try { result = responseText ? JSON.parse(responseText) : {}; } catch {}
+    product = result.product || null;
+
+    if (!response.ok || !result.ok || !product) {
+      const detail = String(result.error || responseText || "The product endpoint returned no product record.")
+        .replace(/<[^>]*>/g, " ").slice(0, 700);
+      throw new Error(`Website publish failed (HTTP ${response.status}): ${detail}`);
+    }
+
+    // Save the new product ID before attempting Telegram delivery.
+    d.created_product_id = product.id;
+    session.step = "confirm";
+    session.data = d;
+    try { await saveTelegramSession(env, session); }
+    catch (error) {
+      console.error("Could not save product publish checkpoint", {
+        product_id: String(product.id),
+        error: String(error?.message || error)
+      });
+    }
   }
 
   let telegramResult;
@@ -282,15 +306,17 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
       error: String(error?.message || error)
     });
     telegramResult = {
-      sent: 0, total: 0, groups: [],
+      sent: 0,
+      total: 0,
+      groups: [],
       failures: [{ chat_id: "", error: String(error?.message || error) }]
     };
   }
+
   try { await resetTelegramProductDraft(env, chatId); }
   catch (error) { console.error("Could not reset product draft after publish", error); }
   return { product, telegramResult };
 }
-
 
 async function getTelegramConnectedProfile(env, chatId, telegramUserId) {
   const link = await getPromoterTelegramLink(env, telegramUserId);
