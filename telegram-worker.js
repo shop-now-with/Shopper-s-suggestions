@@ -2434,15 +2434,15 @@ async function handleTelegramUpdate(update, env) {
         ? `📣 Delivered to ${delivery.sent}/${delivery.total || delivery.sent} Telegram group(s).`
         : "⚠️ Saved on the website, but not delivered to Telegram yet.";
       const failureLine = delivery.failures?.length
-        ? `\\n⚠️ ${delivery.failures.length} group(s) could not receive it. Check the bot's posting permissions.`
+        ? `\n⚠️ ${delivery.failures.length} group(s) could not receive it. Check the bot's posting permissions.`
         : "";
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
-          `🎉 <b>Product #${created.product.id} published.</b>\\n\\n` +
+          `🎉 <b>Product #${created.product.id} published.</b>\n\n` +
           deliveryLine + failureLine +
-          `\\n\\nWebsite link: ${productShareUrl(created.product.id)}` +
-          `\\nUse /addproduct for another product.`,
+          `\n\nWebsite link: ${productShareUrl(created.product.id)}` +
+          `\nUse /addproduct for another product.`,
         parse_mode: "HTML",
         disable_web_page_preview: true
       });
@@ -2450,7 +2450,7 @@ async function handleTelegramUpdate(update, env) {
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
-          `❌ Could not publish.\\n\\n` +
+          `❌ Could not publish.\n\n` +
           `${escapeTelegramHtml(error.message || "Unknown error")}`,
         parse_mode: "HTML"
       });
@@ -2485,8 +2485,8 @@ async function submitAdsUtr(env, chatId, userId, utr) {
   const chat = await telegramApi(env, "getChat", { chat_id: chatId }).catch(() => ({result:{}}));
   await telegramApi(env, "sendMessage", {
     chat_id: owner,
-    text: "💳 <b>New Paid Ads payment request</b>\\n\\n👤 " + escapeTelegramHtml(chat.result?.first_name || chat.result?.username || "Promoter") +
-      "\\n🆔 <code>" + escapeHtml(userId) + "</code>\\n🔢 UTR: <code>" + escapeHtml(value) + "</code>\\n📦 Request: #" + id + "\\n💰 ₹150 / 30 days",
+    text: "💳 <b>New Paid Ads payment request</b>\n\n👤 " + escapeTelegramHtml(chat.result?.first_name || chat.result?.username || "Promoter") +
+      "\n🆔 <code>" + escapeHtml(userId) + "</code>\n🔢 UTR: <code>" + escapeHtml(value) + "</code>\n📦 Request: #" + id + "\n💰 ₹150 / 30 days",
     parse_mode: "HTML",
     reply_markup: {inline_keyboard:[[
       {text:"✅ Approve 30 days",callback_data:"adsapprove:"+id},
@@ -2522,7 +2522,7 @@ async function handleAdsPaymentUtr(env, session, chatId, userId, text) {
     await saveTelegramSession(env,session);
     await telegramApi(env,"sendMessage",{chat_id:chatId,text:"✅ UTR submitted. Request #"+id+" is pending admin approval. Your plan activates only after approval."});
   } catch(error) {
-    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"❌ "+escapeTelegramHtml(error.message || "Could not submit UTR.")+"\\nSend it again, or use /cancel."});
+    await telegramApi(env,"sendMessage",{chat_id:chatId,text:"❌ "+escapeTelegramHtml(error.message || "Could not submit UTR.")+"\nSend it again, or use /cancel."});
   }
 }
 
