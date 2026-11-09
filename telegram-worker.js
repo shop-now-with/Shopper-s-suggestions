@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS telegram_promoter_links (
   chat_id TEXT NOT NULL,
   encrypted_api_key TEXT NOT NULL,
   key_prefix TEXT NOT NULL DEFAULT '',
+  promoter_account_id TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -220,25 +221,35 @@ async function verifyTelegramAdminAccount(env, chatId, telegramUserId) {
 
 async function verifyPromoterApiKey(apiKey) {
   const response = await fetch("https://shopperssuggestions.online/api/integrations/products", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: "{}"
+    method: "GET",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json", "Cache-Control": "no-cache" }
   });
   const data = await response.json().catch(() => ({}));
-  return response.status === 400 && /title is required/i.test(String(data.error || ""));
+  return response.ok && data.ok === true && data.account_id != null ? String(data.account_id) : null;
 }
 
-async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey) {
+async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey, promoterAccountId) {
+  const existing = await getPromoterTelegramLink(env, telegramUserId);
+  const previousAccountId = String(existing?.promoter_account_id || "");
+  const nextAccountId = String(promoterAccountId);
+  if (previousAccountId && previousAccountId !== nextAccountId) {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM telegram_ads_verified_chats WHERE telegram_user_id=?").bind(String(telegramUserId)),
+      env.DB.prepare("DELETE FROM telegram_ads_accounts WHERE telegram_user_id=?").bind(String(telegramUserId)),
+      env.DB.prepare("DELETE FROM telegram_ads_product_cycles WHERE telegram_user_id=?").bind(String(telegramUserId))
+    ]);
+  }
   const encrypted = await encryptPromoterApiKey(env, apiKey);
   await env.DB.prepare(`
-    INSERT INTO telegram_promoter_links (telegram_user_id, chat_id, encrypted_api_key, key_prefix, created_at, updated_at)
-    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    INSERT INTO telegram_promoter_links (telegram_user_id, chat_id, encrypted_api_key, key_prefix, promoter_account_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT(telegram_user_id) DO UPDATE SET
       chat_id=excluded.chat_id,
       encrypted_api_key=excluded.encrypted_api_key,
       key_prefix=excluded.key_prefix,
+      promoter_account_id=excluded.promoter_account_id,
       updated_at=CURRENT_TIMESTAMP
-  `).bind(String(telegramUserId), String(chatId), encrypted, apiKey.slice(0, 16)).run();
+  `).bind(String(telegramUserId), String(chatId), encrypted, apiKey.slice(0, 16), nextAccountId).run();
 }
 
 async function createPromoterProductFromTelegramSession(env, chatId, telegramUserId) {
@@ -441,6 +452,9 @@ async function ensureSchema(env) {
   if (!names.has("featured")) {
     await env.DB.prepare("ALTER TABLE products ADD COLUMN featured INTEGER NOT NULL DEFAULT 0").run();
   }
+  const linkCols = await env.DB.prepare("PRAGMA table_info(telegram_promoter_links)").all();
+  const linkNames = new Set((linkCols.results || []).map((r) => r.name));
+  if (!linkNames.has("promoter_account_id")) await env.DB.prepare("ALTER TABLE telegram_promoter_links ADD COLUMN promoter_account_id TEXT NOT NULL DEFAULT ''").run();
   const adsCols = await env.DB.prepare("PRAGMA table_info(telegram_ads_verified_chats)").all();
   const adsNames = new Set((adsCols.results || []).map((r) => r.name));
   if (!adsNames.has("batch_number")) await env.DB.prepare("ALTER TABLE telegram_ads_verified_chats ADD COLUMN batch_number INTEGER NOT NULL DEFAULT 1").run();
@@ -1843,13 +1857,14 @@ async function handleTelegramUpdate(update, env) {
     }
     try { await telegramApi(env, "deleteMessage", { chat_id: chatId, message_id: message.message_id }); } catch {}
     try {
-      if (!await verifyPromoterApiKey(text)) {
+      const promoterAccountId = await verifyPromoterApiKey(text);
+      if (!promoterAccountId) {
         s.step = "idle";
         await saveTelegramSession(env, s);
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ API key rejected. Check that it is active and belongs to an approved promoter account, then try /connect again." });
         return;
       }
-      await connectPromoterTelegram(env, chatId, user.id, text);
+      await connectPromoterTelegram(env, chatId, user.id, text, promoterAccountId);
       s.step = "idle";
       s.data = {};
       await saveTelegramSession(env, s);
