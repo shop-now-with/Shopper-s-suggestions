@@ -1523,7 +1523,7 @@ async function handleTelegramCallback(update, env) {
         const current = await getAdminAdContent(env);
         s.step = "adminad_edit_buttons"; s.data = {}; await saveTelegramSession(env, s);
         const currentLines = current.buttons.map(b => b.text + " | " + b.url).join("\n");
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔗 Send the buttons, one per line, in this format:\n\nButton label | https://example.com\n\nCurrent buttons:\n" + (currentLines || "(none)") + "\n\nMaximum 4 buttons. HTTPS links only. Use /cancel to keep the current buttons." });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔗 Send the buttons, one per line, in this format:\n\nButton label | https://example.com\n\nCurrent buttons:\n" + (currentLines || "(none)") + "\n\nMaximum 4 buttons. HTTPS links only. Send none to remove all buttons, or /cancel to keep the current buttons." });
       } else if (action === "send") {
         const result = await broadcastAdminAdToGroups(env);
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion sent</b>\n\nGroups: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
@@ -2890,8 +2890,9 @@ async function saveAdminAdContent(env, message, buttons) {
 }
 
 function parseAdminAdButtons(raw) {
+  if (String(raw || "").trim().toLowerCase() === "none") return [];
   const lines = String(raw || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  if (!lines.length) throw new Error("Add at least one button.");
+  if (!lines.length) throw new Error("Add at least one button, or send 'none' to remove all buttons.");
   if (lines.length > 4) throw new Error("You can add up to 4 buttons.");
   return lines.map((line, index) => {
     const divider = line.indexOf("|");
