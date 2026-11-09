@@ -240,7 +240,10 @@ async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey, prom
     } catch {}
   }
   const nextAccountId = String(promoterAccountId);
-  if (previousAccountId && previousAccountId !== nextAccountId) {
+  // If the previous key cannot be resolved (for example, it was revoked
+  // when a new account/key was created), treat the reconnect as an account
+  // change too. Otherwise the Telegram-user cooldown would incorrectly carry over.
+  if (existing && (!previousAccountId || previousAccountId !== nextAccountId)) {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM telegram_ads_verified_chats WHERE telegram_user_id=?").bind(String(telegramUserId)),
       env.DB.prepare("DELETE FROM telegram_ads_accounts WHERE telegram_user_id=?").bind(String(telegramUserId)),
