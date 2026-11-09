@@ -1878,7 +1878,13 @@ async function handleTelegramUpdate(update, env) {
   }
 
   if (command === "start") {
-    await setTelegramCommandMenu(env, publicBotCommands());
+    if (isOwnerAdmin(env, chat, userId)) {
+      await setTelegramCommandMenu(env, s.unlocked ? adminBotCommands() : publicBotCommands(), {
+        type: "chat", chat_id: chatId
+      });
+    } else {
+      await setTelegramCommandMenu(env, publicBotCommands());
+    }
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text:
@@ -2133,6 +2139,12 @@ async function handleTelegramUpdate(update, env) {
       });
       return;
     }
+
+    // Show the owner-only admin command menu before account verification,
+    // so the commands are visible while the owner completes /connect.
+    await setTelegramCommandMenu(env, adminBotCommands(), {
+      type: "chat", chat_id: chatId
+    });
 
     try {
       const verified = await verifyTelegramAdminAccount(env, chatId, userId);
