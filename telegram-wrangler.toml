@@ -2,6 +2,9 @@ name = "shopper-s-suggestions-telegram"
 main = "telegram-worker.js"
 compatibility_date = "2026-09-19"
 
+[triggers]
+crons = ["*/15 * * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "product-db"
