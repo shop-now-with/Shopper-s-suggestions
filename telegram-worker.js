@@ -2877,6 +2877,7 @@ async function saveAdminAdSchedule(env, frequency) {
 }
 
 async function runScheduledAdminAd(env) {
+  await ensureSchema(env);
   const now = nowSql();
   const schedule = await env.DB.prepare("SELECT frequency,next_run_at,active FROM telegram_admin_ad_schedule WHERE id=1 LIMIT 1").first();
   if (!schedule || Number(schedule.active) !== 1 || String(schedule.next_run_at) > now) return;
