@@ -230,7 +230,15 @@ async function verifyPromoterApiKey(apiKey) {
 
 async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey, promoterAccountId) {
   const existing = await getPromoterTelegramLink(env, telegramUserId);
-  const previousAccountId = String(existing?.promoter_account_id || "");
+  let previousAccountId = String(existing?.promoter_account_id || "");
+  // Older links predate account-ID tracking. Identify their owner from the
+  // currently stored API key before deciding whether this is an account switch.
+  if (existing && !previousAccountId) {
+    try {
+      const oldApiKey = await decryptPromoterApiKey(env, existing.encrypted_api_key);
+      previousAccountId = String(await verifyPromoterApiKey(oldApiKey) || "");
+    } catch {}
+  }
   const nextAccountId = String(promoterAccountId);
   if (previousAccountId && previousAccountId !== nextAccountId) {
     await env.DB.batch([
