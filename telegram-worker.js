@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS telegram_ads_product_cycles (telegram_user_id TEXT NO
 CREATE TABLE IF NOT EXISTS telegram_ads_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id TEXT NOT NULL, chat_id TEXT NOT NULL, utr TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, paid_until TEXT);
 CREATE TABLE IF NOT EXISTS telegram_ads_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS telegram_admin_ad_schedule (id INTEGER PRIMARY KEY CHECK (id=1), frequency TEXT NOT NULL, next_run_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS telegram_admin_ad_content (id INTEGER PRIMARY KEY CHECK (id=1), message_text TEXT NOT NULL, buttons_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS telegram_ai_daily_usage (usage_date TEXT PRIMARY KEY, requests INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS telegram_ai_user_daily_usage (usage_date TEXT NOT NULL, telegram_user_id TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (usage_date, telegram_user_id));
 `;
@@ -1513,7 +1514,17 @@ async function handleTelegramCallback(update, env) {
     }
     const action = data.slice("adminad:".length);
     try {
-      if (action === "send") {
+      if (action === "edit_message") {
+        if (callback?.message?.chat?.type !== "private") throw new Error("Open /adminad in a private chat to edit the message.");
+        s.step = "adminad_edit_message"; s.data = {}; await saveTelegramSession(env, s);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✏️ Send the new promotional message text. It will replace the current message. Use /cancel to keep the existing message." });
+      } else if (action === "edit_buttons") {
+        if (callback?.message?.chat?.type !== "private") throw new Error("Open /adminad in a private chat to edit buttons.");
+        const current = await getAdminAdContent(env);
+        s.step = "adminad_edit_buttons"; s.data = {}; await saveTelegramSession(env, s);
+        const currentLines = current.buttons.map(b => b.text + " | " + b.url).join("\n");
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔗 Send the buttons, one per line, in this format:\n\nButton label | https://example.com\n\nCurrent buttons:\n" + (currentLines || "(none)") + "\n\nMaximum 4 buttons. HTTPS links only. Use /cancel to keep the current buttons." });
+      } else if (action === "send") {
         const result = await broadcastAdminAdToGroups(env);
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion sent</b>\n\nGroups: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
       } else if (["daily", "weekly", "monthly"].includes(action)) {
@@ -1721,6 +1732,34 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
+
+  if (s.step === "adminad_edit_message" && text && !text.startsWith("/")) {
+    if (chat?.type !== "private" || !s.unlocked || !isOwnerAdmin(env, chat, userId)) return;
+    const updatedText = cleanText(text, 3500);
+    if (!updatedText) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "The message cannot be empty. Send the new ad text, or /cancel." });
+      return;
+    }
+    const current = await getAdminAdContent(env);
+    await saveAdminAdContent(env, updatedText, current.buttons);
+    s.step = "idle"; s.data = {}; await saveTelegramSession(env, s);
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Promotional message updated. Future manual and scheduled broadcasts will use it." });
+    return;
+  }
+
+  if (s.step === "adminad_edit_buttons" && text && !text.startsWith("/")) {
+    if (chat?.type !== "private" || !s.unlocked || !isOwnerAdmin(env, chat, userId)) return;
+    try {
+      const buttons = parseAdminAdButtons(text);
+      const current = await getAdminAdContent(env);
+      await saveAdminAdContent(env, current.message, buttons);
+      s.step = "idle"; s.data = {}; await saveTelegramSession(env, s);
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Promotional buttons updated. Future broadcasts will use the new buttons." });
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ " + escapeTelegramHtml(error.message || "Invalid buttons.") + "\n\nSend one button per line as:\nButton label | https://example.com\n\nMaximum 4 buttons. Or /cancel.", parse_mode: "HTML" });
+    }
+    return;
+  }
 
   if (command === "explain") {
     if (chat?.type !== "private" || !user?.id) {
@@ -2285,11 +2324,14 @@ async function handleTelegramUpdate(update, env) {
       }
       const schedule = await env.DB.prepare("SELECT frequency,next_run_at,active FROM telegram_admin_ad_schedule WHERE id=1 LIMIT 1").first();
       const status = schedule?.active ? (schedule.frequency + " — next send: " + schedule.next_run_at) : "No automatic schedule is active.";
+      const content = await getAdminAdContent(env);
+      const buttonSummary = content.buttons.map((b, i) => (i + 1) + ". " + b.text + " → " + b.url).join("\n") || "(no buttons)";
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
-        text: "<b>Shopper's Suggestions group promotion</b>\n\nWant to learn how affiliate marketing works?\n\nDiscover the basics, explore useful products, and learn how to get started with Shopper's Suggestions.\n\nStart learning today!\n\n🌐 shopperssuggestions.online\n\n<b>Current schedule:</b> " + escapeTelegramHtml(status) + "\n\nChoose an action below, or use /adminad now, /adminad daily, /adminad weekly, /adminad monthly, or /adminad off.",
+        text: "<b>Shopper's Suggestions group promotion</b>\n\n<b>Current message:</b>\n" + escapeTelegramHtml(content.message) + "\n\n<b>Current buttons:</b>\n" + escapeTelegramHtml(buttonSummary) + "\n\n<b>Current schedule:</b> " + escapeTelegramHtml(status) + "\n\nChoose an action below, or use /adminad now, /adminad daily, /adminad weekly, /adminad monthly, or /adminad off.",
         parse_mode: "HTML",
         reply_markup: { inline_keyboard: [
+          [{ text: "✏️ Edit message", callback_data: "adminad:edit_message" }, { text: "🔗 Edit buttons", callback_data: "adminad:edit_buttons" }],
           [{ text: "📣 Send to groups now", callback_data: "adminad:send" }],
           [{ text: "Daily", callback_data: "adminad:daily" }, { text: "Weekly", callback_data: "adminad:weekly" }, { text: "Monthly", callback_data: "adminad:monthly" }],
           [{ text: "Disable schedule", callback_data: "adminad:off" }]
@@ -2834,7 +2876,39 @@ const ADMIN_PROMO_MARKUP = { inline_keyboard: [
   [{ text: "🚀 Join us & start learning", url: "https://t.me/Shopperssuggestions_bot?start=explain" }]
 ] };
 
+async function getAdminAdContent(env) {
+  const row = await env.DB.prepare("SELECT message_text,buttons_json FROM telegram_admin_ad_content WHERE id=1 LIMIT 1").first();
+  if (!row) return { message: ADMIN_PROMO_TEXT, buttons: ADMIN_PROMO_MARKUP.inline_keyboard.flat().map(b => ({ text: b.text, url: b.url })) };
+  let buttons = [];
+  try { buttons = JSON.parse(row.buttons_json || "[]"); } catch {}
+  return { message: String(row.message_text || ADMIN_PROMO_TEXT), buttons: Array.isArray(buttons) ? buttons : [] };
+}
+
+async function saveAdminAdContent(env, message, buttons) {
+  await env.DB.prepare("INSERT INTO telegram_admin_ad_content (id,message_text,buttons_json,updated_at) VALUES (1,?,?,?) ON CONFLICT(id) DO UPDATE SET message_text=excluded.message_text,buttons_json=excluded.buttons_json,updated_at=excluded.updated_at")
+    .bind(cleanText(message, 3500), JSON.stringify(buttons), nowSql()).run();
+}
+
+function parseAdminAdButtons(raw) {
+  const lines = String(raw || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!lines.length) throw new Error("Add at least one button.");
+  if (lines.length > 4) throw new Error("You can add up to 4 buttons.");
+  return lines.map((line, index) => {
+    const divider = line.indexOf("|");
+    if (divider < 1) throw new Error("Line " + (index + 1) + " must use: Button label | https://example.com");
+    const text = cleanText(line.slice(0, divider), 48);
+    const url = cleanText(line.slice(divider + 1), 500);
+    if (!text || !url) throw new Error("Line " + (index + 1) + " needs both a label and a URL.");
+    let parsed;
+    try { parsed = new URL(url); } catch { throw new Error("Line " + (index + 1) + " has an invalid URL."); }
+    if (parsed.protocol !== "https:") throw new Error("Only HTTPS button links are allowed.");
+    return { text, url: parsed.toString() };
+  });
+}
+
 async function broadcastAdminAdToGroups(env) {
+  const content = await getAdminAdContent(env);
+  const replyMarkup = { inline_keyboard: content.buttons.map(button => [{ text: button.text, url: button.url }]) };
   const rows = await env.DB.prepare("SELECT chat_id FROM telegram_chats WHERE active=1 AND type IN ('group','supergroup') ORDER BY updated_at DESC").all();
   const targets = rows.results || [];
   let sent = 0;
@@ -2843,8 +2917,8 @@ async function broadcastAdminAdToGroups(env) {
     try {
       await telegramSendWithRetry(env, "sendMessage", {
         chat_id: row.chat_id,
-        text: ADMIN_PROMO_TEXT,
-        reply_markup: ADMIN_PROMO_MARKUP,
+        text: content.message,
+        ...(content.buttons.length ? { reply_markup: replyMarkup } : {}),
         disable_web_page_preview: true
       });
       sent++;
