@@ -801,9 +801,9 @@ function adminBotCommands() {
   return [...publicBotCommands(),
     { command: "admin", description: "Unlock admin tools" },
     { command: "lock", description: "Lock admin tools" },
-    { command: "broadcast", description: "Message all registered chats" },
+    { command: "broadcast", description: "Message all registered groups and channels" },
     { command: "globalgroupmsg", description: "Message all groups and channels" },
-    { command: "globalusermsg", description: "Message all private users" },
+    { command: "globalusermsg", description: "Message all registered groups and channels" },
     { command: "sendto", description: "Send a message to a chat ID" },
     { command: "channel", description: "Send a message to a group or channel" },
     { command: "chats", description: "List registered chats" },
@@ -1544,7 +1544,7 @@ async function handleTelegramCallback(update, env) {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔗 Send the buttons, one per line, in this format:\n\nButton label | https://example.com\n\nCurrent buttons:\n" + (currentLines || "(none)") + "\n\nMaximum 4 buttons. HTTPS links only. Send none to remove all buttons, or /cancel to keep the current buttons." });
       } else if (action === "send") {
         const result = await broadcastAdminAdToGroups(env);
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion sent</b>\n\nGroups: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion sent</b>\n\nGroups/channels: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
       } else if (["daily", "weekly", "monthly"].includes(action)) {
         const next = await saveAdminAdSchedule(env, action);
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ <b>" + action.charAt(0).toUpperCase() + action.slice(1) + " promotion schedule enabled.</b>\n\nNext send: " + next + "\n\nUse /adminad and choose Disable schedule to stop it.", parse_mode: "HTML" });
@@ -2344,7 +2344,7 @@ async function handleTelegramUpdate(update, env) {
       if (action === "now" || action === "send") {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 Sending the Shopper's Suggestions promotion to all registered groups…" });
         const result = await broadcastAdminAdToGroups(env);
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion finished</b>\n\nGroups: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion finished</b>\n\nGroups/channels: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
         return;
       }
       if (["daily", "weekly", "monthly"].includes(action)) {
@@ -2402,10 +2402,10 @@ async function handleTelegramUpdate(update, env) {
       return;
     }
     const groupsOnly = command === "globalgroupmsg";
-    const result = await broadcastToTelegram(env, args, groupsOnly ? ["group", "supergroup", "channel"] : ["private"]);
+    const result = await broadcastToTelegram(env, args, ["group", "supergroup", "channel"]);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: (groupsOnly ? "📣 <b>Group/channel broadcast finished</b>" : "📨 <b>Private-user broadcast finished</b>") +
+      text: "📣 <b>Group/channel broadcast finished</b>" +
         "\n\n🎯 Targets: " + result.total + "\n✅ Sent: " + result.sent + "\n❌ Failed: " + result.failed,
       parse_mode: "HTML"
     });
@@ -2424,10 +2424,10 @@ async function handleTelegramUpdate(update, env) {
 
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "📣 Broadcasting to all registered users, groups and channels…"
+      text: "📣 Broadcasting to all registered groups and channels…"
     });
 
-    const result = await broadcastToTelegram(env, args);
+    const result = await broadcastToTelegram(env, args, ["group", "supergroup", "channel"]);
 
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
