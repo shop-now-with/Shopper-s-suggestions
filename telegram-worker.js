@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS telegram_ads_accounts (telegram_user_id TEXT PRIMARY 
 CREATE TABLE IF NOT EXISTS telegram_ads_product_cycles (telegram_user_id TEXT NOT NULL, product_id TEXT NOT NULL, sent_count INTEGER NOT NULL DEFAULT 0, cooldown_until TEXT, last_sent_at TEXT, PRIMARY KEY (telegram_user_id, product_id));
 CREATE TABLE IF NOT EXISTS telegram_ads_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id TEXT NOT NULL, chat_id TEXT NOT NULL, utr TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, paid_until TEXT);
 CREATE TABLE IF NOT EXISTS telegram_ads_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS telegram_admin_ad_schedule (id INTEGER PRIMARY KEY CHECK (id=1), frequency TEXT NOT NULL, next_run_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS telegram_ai_daily_usage (usage_date TEXT PRIMARY KEY, requests INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS telegram_ai_user_daily_usage (usage_date TEXT NOT NULL, telegram_user_id TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (usage_date, telegram_user_id));
 `;
@@ -792,7 +793,8 @@ function adminBotCommands() {
     { command: "paymentdts", description: "Review paid-plan payments" },
     { command: "setadsqr", description: "Set the paid-plan QR image" },
     { command: "showadsqr", description: "Show the current payment QR" },
-    { command: "removeadsqr", description: "Remove the payment QR" }
+    { command: "removeadsqr", description: "Remove the payment QR" },
+    { command: "adminad", description: "Send or schedule the group promotion" }
   ];
 }
 async function setTelegramCommandMenu(env, commands, scope) {
@@ -1504,6 +1506,29 @@ async function handleTelegramCallback(update, env) {
     return;
   }
 
+  if (data.startsWith("adminad:")) {
+    if (!adminAccess || !isOwnerAdmin(env, callback?.message?.chat, userId)) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 Only the authenticated bot owner can manage promotional broadcasts." });
+      return;
+    }
+    const action = data.slice("adminad:".length);
+    try {
+      if (action === "send") {
+        const result = await broadcastAdminAdToGroups(env);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion sent</b>\n\nGroups: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
+      } else if (["daily", "weekly", "monthly"].includes(action)) {
+        const next = await saveAdminAdSchedule(env, action);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ <b>" + action.charAt(0).toUpperCase() + action.slice(1) + " promotion schedule enabled.</b>\n\nNext send: " + next + "\n\nUse /adminad and choose Disable schedule to stop it.", parse_mode: "HTML" });
+      } else if (action === "off") {
+        await env.DB.prepare("UPDATE telegram_admin_ad_schedule SET active=0, updated_at=? WHERE id=1").bind(nowSql()).run();
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⏸ Promotional schedule disabled. You can still send manually with /adminad." });
+      }
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ " + escapeTelegramHtml(error.message || "Could not complete that action."), parse_mode: "HTML" });
+    }
+    return;
+  }
+
   if (data === "adsrun:free" || data === "adsrun:paid") {
     if (callback?.message?.chat?.type !== "private" || !promoterAccess) {
       await telegramApi(env, "sendMessage", {chat_id:chatId,text:"🔒 Connect your promoter account in a private chat before choosing a plan."});
@@ -1878,6 +1903,13 @@ async function handleTelegramUpdate(update, env) {
   }
 
   if (command === "start") {
+    if (args.trim().toLowerCase() === "explain" && chat?.type === "private" && user?.id) {
+      s.step = "explain_chat";
+      s.data = { explain_history: [] };
+      await saveTelegramSession(env, s);
+      await sendExplainAiReply(env, s, chatId, userId, "Start my beginner-friendly affiliate marketing lesson. Include the website and explain the first steps.", true);
+      return;
+    }
     if (isOwnerAdmin(env, chat, userId)) {
       await setTelegramCommandMenu(env, s.unlocked ? adminBotCommands() : publicBotCommands(), {
         type: "chat", chat_id: chatId
@@ -1942,7 +1974,7 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel","admin","lock","broadcast","globalgroupmsg","globalusermsg","sendto","channel","chats","chatlist","refreshchat","registerchat","stats","paymentdts","setadsqr","showadsqr","removeadsqr"]);
+  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel","admin","lock","broadcast","globalgroupmsg","globalusermsg","sendto","channel","chats","chatlist","refreshchat","registerchat","stats","paymentdts","setadsqr","showadsqr","removeadsqr","adminad"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
@@ -2177,6 +2209,7 @@ async function handleTelegramUpdate(update, env) {
           `/setadsqr — Set paid plan QR\n` +
           `/showadsqr — View current QR\n` +
           `/removeadsqr — Remove current QR\n` +
+          `/adminad — Send or schedule the group promotion\n` +
           `/lock — Lock admin tools`,
         parse_mode: "HTML"
       });
@@ -2227,6 +2260,43 @@ async function handleTelegramUpdate(update, env) {
         chat_id: chatId,
         text: `🔐 This command requires admin access. Use /admin in your private bot chat.`
       });
+    }
+    return;
+  }
+
+  if (command === "adminad") {
+    const action = args.trim().toLowerCase();
+    try {
+      if (action === "now" || action === "send") {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 Sending the Shopper's Suggestions promotion to all registered groups…" });
+        const result = await broadcastAdminAdToGroups(env);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 <b>Promotion finished</b>\n\nGroups: " + result.total + "\nSent: " + result.sent + "\nFailed: " + result.failed, parse_mode: "HTML" });
+        return;
+      }
+      if (["daily", "weekly", "monthly"].includes(action)) {
+        const next = await saveAdminAdSchedule(env, action);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ <b>" + action.charAt(0).toUpperCase() + action.slice(1) + " promotion schedule enabled.</b>\n\nNext send: " + next + "\n\nUse /adminad off to stop it.", parse_mode: "HTML" });
+        return;
+      }
+      if (action === "off" || action === "stop") {
+        await env.DB.prepare("UPDATE telegram_admin_ad_schedule SET active=0, updated_at=? WHERE id=1").bind(nowSql()).run();
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⏸ Promotional schedule disabled." });
+        return;
+      }
+      const schedule = await env.DB.prepare("SELECT frequency,next_run_at,active FROM telegram_admin_ad_schedule WHERE id=1 LIMIT 1").first();
+      const status = schedule?.active ? (schedule.frequency + " — next send: " + schedule.next_run_at) : "No automatic schedule is active.";
+      await telegramApi(env, "sendMessage", {
+        chat_id: chatId,
+        text: "<b>Shopper's Suggestions group promotion</b>\n\nWant to learn how affiliate marketing works?\n\nDiscover the basics, explore useful products, and learn how to get started with Shopper's Suggestions.\n\nStart learning today!\n\n🌐 shopperssuggestions.online\n\n<b>Current schedule:</b> " + escapeTelegramHtml(status) + "\n\nChoose an action below, or use /adminad now, /adminad daily, /adminad weekly, /adminad monthly, or /adminad off.",
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [
+          [{ text: "📣 Send to groups now", callback_data: "adminad:send" }],
+          [{ text: "Daily", callback_data: "adminad:daily" }, { text: "Weekly", callback_data: "adminad:weekly" }, { text: "Monthly", callback_data: "adminad:monthly" }],
+          [{ text: "Disable schedule", callback_data: "adminad:off" }]
+        ] }
+      });
+    } catch (error) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ " + escapeTelegramHtml(error.message || "Could not load the promotion controls."), parse_mode: "HTML" });
     }
     return;
   }
@@ -2758,6 +2828,65 @@ async function handleAdsPaymentUtr(env, session, chatId, userId, text) {
   }
 }
 
+const ADMIN_PROMO_TEXT = "Want to learn how affiliate marketing works?\n\nDiscover the basics, explore useful products, and learn how to get started with Shopper's Suggestions.\n\nStart learning today!";
+const ADMIN_PROMO_MARKUP = { inline_keyboard: [
+  [{ text: "🌐 Visit Shopper's Suggestions", url: "https://shopperssuggestions.online" }],
+  [{ text: "🚀 Join us & start learning", url: "https://t.me/Shopperssuggestions_bot?start=explain" }]
+] };
+
+async function broadcastAdminAdToGroups(env) {
+  const rows = await env.DB.prepare("SELECT chat_id FROM telegram_chats WHERE active=1 AND type IN ('group','supergroup') ORDER BY updated_at DESC").all();
+  const targets = rows.results || [];
+  let sent = 0;
+  let failed = 0;
+  for (const row of targets) {
+    try {
+      await telegramSendWithRetry(env, "sendMessage", {
+        chat_id: row.chat_id,
+        text: ADMIN_PROMO_TEXT,
+        reply_markup: ADMIN_PROMO_MARKUP,
+        disable_web_page_preview: true
+      });
+      sent++;
+      await new Promise(resolve => setTimeout(resolve, 60));
+    } catch (error) {
+      failed++;
+      const message = String(error?.message || error);
+      console.error("Admin promotion delivery failed", String(row.chat_id), message);
+      if (/bot was blocked|CHAT_WRITE_FORBIDDEN|chat not found|not enough rights/i.test(message)) {
+        await env.DB.prepare("UPDATE telegram_chats SET active=0,updated_at=? WHERE chat_id=?").bind(nowSql(), String(row.chat_id)).run();
+      }
+    }
+  }
+  return { total: targets.length, sent, failed };
+}
+
+function nextAdminAdDate(frequency, from = new Date()) {
+  const next = new Date(from.getTime());
+  if (frequency === "daily") next.setUTCDate(next.getUTCDate() + 1);
+  else if (frequency === "weekly") next.setUTCDate(next.getUTCDate() + 7);
+  else if (frequency === "monthly") next.setUTCMonth(next.getUTCMonth() + 1);
+  else throw new Error("Choose daily, weekly, or monthly.");
+  return next.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
+}
+
+async function saveAdminAdSchedule(env, frequency) {
+  const next = nextAdminAdDate(frequency);
+  await env.DB.prepare("INSERT INTO telegram_admin_ad_schedule (id,frequency,next_run_at,active,updated_at) VALUES (1,?,?,1,?) ON CONFLICT(id) DO UPDATE SET frequency=excluded.frequency,next_run_at=excluded.next_run_at,active=1,updated_at=excluded.updated_at").bind(frequency, next, nowSql()).run();
+  return next;
+}
+
+async function runScheduledAdminAd(env) {
+  const now = nowSql();
+  const schedule = await env.DB.prepare("SELECT frequency,next_run_at,active FROM telegram_admin_ad_schedule WHERE id=1 LIMIT 1").first();
+  if (!schedule || Number(schedule.active) !== 1 || String(schedule.next_run_at) > now) return;
+  const next = nextAdminAdDate(schedule.frequency);
+  const claim = await env.DB.prepare("UPDATE telegram_admin_ad_schedule SET next_run_at=?,updated_at=? WHERE id=1 AND active=1 AND next_run_at=?").bind(next, nowSql(), schedule.next_run_at).run();
+  if (!Number(claim.meta?.changes || 0)) return;
+  const result = await broadcastAdminAdToGroups(env);
+  console.log("Scheduled admin promotion finished", result);
+}
+
 async function runTelegramAdsScheduler(env) {
   await ensureSchema(env);
   const now = nowSql();
@@ -2897,6 +3026,7 @@ async function health(env) {
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(runTelegramAdsScheduler(env).catch(error => console.error("Scheduled ads run failed", error)));
+    ctx.waitUntil(runScheduledAdminAd(env).catch(error => console.error("Scheduled admin promotion failed", error)));
   },
   async fetch(request, env, ctx) {
     try {
