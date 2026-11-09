@@ -648,6 +648,24 @@ async function recordTelegramChat(env, chat) {
 }
 
 async function recordTelegramUpdateChat(env, update) {
+  // Register channels/groups as soon as Telegram reports that the bot was added
+  // or promoted. This lets admin broadcasts target quiet channels too, even
+  // before the channel has published its first post.
+  const membership = update?.my_chat_member;
+  if (membership?.chat?.id != null) {
+    const status = String(membership.new_chat_member?.status || "");
+    const chatId = String(membership.chat.id);
+    if (status === "left" || status === "kicked") {
+      await env.DB.prepare(
+        "UPDATE telegram_chats SET active = 0, updated_at = ? WHERE chat_id = ?"
+      ).bind(nowSql(), chatId).run();
+    } else if (status === "administrator" || status === "member" ||
+               (status === "restricted" && membership.new_chat_member?.is_member)) {
+      await recordTelegramChat(env, membership.chat);
+    }
+    return;
+  }
+
   const message = update?.message || update?.channel_post || update?.edited_channel_post || update?.edited_message;
   if (!message?.chat) return;
   const chat = { ...message.chat };
@@ -3048,7 +3066,7 @@ async function handleTelegramRequest(request, env) {
     }
   } catch (error) {
     console.error("Telegram update error", error);
-    const chatId = update?.message?.chat?.id || update?.channel_post?.chat?.id || update?.callback_query?.message?.chat?.id;
+    const chatId = update?.message?.chat?.id || update?.channel_post?.chat?.id || update?.my_chat_member?.chat?.id || update?.callback_query?.message?.chat?.id;
     if (chatId) {
       try { await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⚠️ Something went wrong while processing that message. Please try again." }); } catch {}
     }
@@ -3070,6 +3088,7 @@ async function setupTelegramWebhook(request, env) {
       "edited_message",
       "channel_post",
       "edited_channel_post",
+      "my_chat_member",
       "callback_query"
     ]
   };
