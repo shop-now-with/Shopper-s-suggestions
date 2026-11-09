@@ -792,7 +792,7 @@ function publicBotCommands() {
     { command: "deleteproduct", description: "Delete your product" },
     { command: "disconnect", description: "Disconnect your account" },
     { command: "adsrun", description: "Set up product promotions" },
-    { command: "adsverify", description: "Verify this group for ads" },
+    { command: "adsverify", description: "Verify a group or channel for ads" },
     { command: "myid", description: "Show your Telegram ID" },
     { command: "cancel", description: "Cancel the current action" }
   ];
@@ -1567,7 +1567,7 @@ async function handleTelegramCallback(update, env) {
     if (data === "adsrun:free") {
       await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free',paid_until=NULL,updated_at=? WHERE telegram_user_id=?").bind(nowSql(),String(userId)).run();
       const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(String(userId)).first();
-      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups/supergroups where you are an admin and this bot can post. Use /adsverify inside each group.\\n\\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 20 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups or channels where you are an admin and this bot can post. Use /adsverify inside each group, or /adsverify @ChannelUsername here.\\n\\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 20 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
     } else {
       const qr=await getAdsQr(env);
       if(!qr){await telegramApi(env,"sendMessage",{chat_id:chatId,text:"⭐ Paid Plan QR is not configured yet. Please try again later."});return;}
@@ -1609,45 +1609,57 @@ async function handleTelegramCallback(update, env) {
   }
 }
 
-async function verifyAdsGroup(env, message) {
-  const chat = message.chat;
+async function verifyAdsGroup(env, message, args = "") {
+  const sourceChat = message.chat;
   const user = message.from;
-  const chatId = String(chat?.id || "");
   const telegramUserId = String(user?.id || "");
-  if (!telegramUserId || !chatId) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "I couldn't identify the person running this command. Please use /adsverify from your own Telegram account." });
-    return;
-  }
-  if (chat.type === "channel") {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Channel verification is not supported by this command yet. Please verify a group or supergroup instead." });
-    return;
-  }
-  if (chat.type !== "group" && chat.type !== "supergroup") {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "Run /adsverify inside the group you want to register, not in a private chat." });
+  let targetChat = sourceChat;
+  const replyChatId = String(sourceChat?.id || "");
+
+  if (!telegramUserId || !replyChatId) return;
+
+  if (sourceChat.type === "private") {
+    const target = cleanText(args, 200);
+    if (!target) {
+      await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "To verify a channel, send /adsverify @YourChannelUsername here. You must be a channel administrator, and this bot must be an administrator with Post Messages permission." });
+      return;
+    }
+    try {
+      const found = await telegramApi(env, "getChat", { chat_id: target });
+      targetChat = found.result;
+    } catch {
+      await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "I couldn't find that channel. Use its public @username and make sure this bot is an administrator there." });
+      return;
+    }
+    if (targetChat?.type !== "channel") {
+      await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "That target is not a channel. For groups, run /adsverify inside the group." });
+      return;
+    }
+  } else if (sourceChat.type !== "group" && sourceChat.type !== "supergroup") {
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "Run /adsverify inside a group, or use /adsverify @YourChannelUsername in this private chat." });
     return;
   }
 
+  const chatId = String(targetChat?.id || "");
   const link = await getPromoterTelegramLink(env, telegramUserId);
   if (!link) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔒 First open a private chat with this bot, use /connect, and connect your approved Shopper's Suggestions promoter account. Then return here and run /adsverify." });
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "First use /connect here to connect your approved Shopper's Suggestions promoter account." });
     return;
   }
 
-  let member;
-  let botInfo;
+  let member, botInfo;
   try {
     [member, botInfo] = await Promise.all([
       telegramApi(env, "getChatMember", { chat_id: chatId, user_id: Number(telegramUserId) }),
       telegramApi(env, "getMe", {})
     ]);
-  } catch (error) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I couldn't verify group permissions. Make sure the bot is still in this group, then try again." });
+  } catch {
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "I couldn't verify permissions. Check that you are an administrator and that the bot is in the target chat." });
     return;
   }
 
-  const userStatus = member.result?.status;
-  if (!["creator", "administrator"].includes(userStatus)) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Only a group owner or administrator can register this group for their ads account." });
+  if (!["creator", "administrator"].includes(member.result?.status)) {
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "Only a channel or group owner/administrator can register this chat." });
     return;
   }
 
@@ -1655,60 +1667,65 @@ async function verifyAdsGroup(env, message) {
   try {
     botMember = await telegramApi(env, "getChatMember", { chat_id: chatId, user_id: botInfo.result.id });
   } catch {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I couldn't check my own group permissions. Please make me a group administrator and try again." });
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "I couldn't check my permissions. Add me as an administrator in the target chat." });
     return;
   }
+
   const botStatus = botMember.result?.status;
-  const canPost = botStatus === "creator" || botStatus === "administrator";
+  const canPost = botStatus === "creator" ||
+    (botStatus === "administrator" && (targetChat.type !== "channel" || botMember.result?.can_post_messages === true));
   if (!canPost) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ I don't have permission to post in this group. Give me permission to send messages, then run /adsverify again." });
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: targetChat.type === "channel"
+      ? "I must be a channel administrator with Post Messages permission."
+      : "I need administrator permission to send messages in this group." });
     return;
   }
 
-  const existingOwner = await env.DB.prepare("SELECT telegram_user_id FROM telegram_ads_verified_chats WHERE chat_id = ? AND active = 1 LIMIT 1")
-    .bind(chatId).first();
+  const existingOwner = await env.DB.prepare("SELECT telegram_user_id FROM telegram_ads_verified_chats WHERE chat_id=? AND active=1 LIMIT 1").bind(chatId).first();
   if (existingOwner && String(existingOwner.telegram_user_id) !== telegramUserId) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ This group is already registered to another Shopper's Suggestions account. It cannot be claimed by a different account." });
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "This chat is already registered to another Shopper's Suggestions account." });
     return;
   }
-  const existing = await env.DB.prepare("SELECT chat_id FROM telegram_ads_verified_chats WHERE chat_id = ? AND telegram_user_id = ? AND active = 1 LIMIT 1")
-    .bind(chatId, telegramUserId).first();
+  const existing = await env.DB.prepare("SELECT chat_id FROM telegram_ads_verified_chats WHERE chat_id=? AND telegram_user_id=? AND active=1 LIMIT 1").bind(chatId, telegramUserId).first();
   if (existing) {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ This group is already verified for your Shopper's Suggestions account." });
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "This " + (targetChat.type === "channel" ? "channel" : "group") + " is already verified." });
     return;
   }
 
-  const countRow = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id = ? AND active = 1")
-    .bind(telegramUserId).first();
+  const countRow = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(telegramUserId).first();
   const currentCount = Number(countRow?.total || 0);
   const account = await ensureAdsAccount(env, telegramUserId);
   const nextBatchAt = account?.next_group_batch_at ? Date.parse(String(account.next_group_batch_at).replace(" ", "T") + "Z") : 0;
   if (currentCount >= 3 && currentCount % 3 === 0 && nextBatchAt && nextBatchAt > Date.now()) {
     const daysLeft = Math.ceil((nextBatchAt - Date.now()) / 86400000);
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "⏳ Your next 3-group batch opens in about " + daysLeft + " day(s). All previously verified groups stay active and continue receiving ads." });
+    await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "Your next 3-chat batch opens in about " + daysLeft + " day(s). Previously verified chats stay active." });
     return;
   }
-  try {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "discover the best by shopper’s suggestions!" });
-  } catch {
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Telegram could not send the verification message, so this group has not been registered. Check my posting permission and try again." });
-    return;
+
+  if (targetChat.type !== "channel") {
+    try {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "discover the best by shopper’s suggestions!" });
+    } catch {
+      await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "Telegram could not send the verification message. Check my posting permission." });
+      return;
+    }
   }
+
   const newCount = currentCount + 1;
   const batchNumber = Math.floor(currentCount / 3) + 1;
   const batchComplete = newCount % 3 === 0;
   const nextBatch = batchComplete ? adsSqlAfterDays(20) : (account?.next_group_batch_at || null);
   await env.DB.prepare("INSERT INTO telegram_ads_verified_chats (chat_id,telegram_user_id,chat_type,title,verified_at,active,batch_number) VALUES (?,?,?,?,?,1,?) ON CONFLICT(chat_id) DO UPDATE SET telegram_user_id=excluded.telegram_user_id,chat_type=excluded.chat_type,title=excluded.title,verified_at=excluded.verified_at,active=1,batch_number=excluded.batch_number")
-    .bind(chatId, telegramUserId, chat.type, cleanText(chat.title || chat.username || "Telegram group", 200), nowSql(), batchNumber).run();
+    .bind(chatId, telegramUserId, targetChat.type, cleanText(targetChat.title || targetChat.username || "Telegram chat", 200), nowSql(), batchNumber).run();
   await env.DB.prepare("UPDATE telegram_ads_accounts SET groups_in_batch=?,batch_number=?,next_group_batch_at=?,next_run_at=CASE WHEN ? >= 3 THEN ? ELSE next_run_at END,updated_at=? WHERE telegram_user_id=?")
     .bind(newCount % 3, batchNumber, nextBatch, newCount, nowSql(), nowSql(), telegramUserId).run();
+
   await telegramApi(env, "sendMessage", {
-    chat_id: chatId,
-    text: "✅ Group verified (" + newCount + " total). " +
-      (batchComplete ? "This batch is complete. You can add 3 more groups in 20 days. All groups remain active for ads." : "Add " + (3 - (newCount % 3)) + " more group(s) in this batch. Previously verified groups stay active.")
+    chat_id: replyChatId,
+    text: "Verified " + (targetChat.type === "channel" ? "channel" : "group") + " (" + newCount + " total). " +
+      (batchComplete ? "You can add 3 more groups or channels in 20 days." : "Add " + (3 - (newCount % 3)) + " more group(s) or channel(s) in this batch.")
   });
 }
-
 async function handleTelegramUpdate(update, env) {
   const message =
     update?.message ||
@@ -1741,7 +1758,7 @@ async function handleTelegramUpdate(update, env) {
   if (isChannelPost && !text.trim().startsWith("/")) return;
 
   if (command === "adsverify") {
-    await verifyAdsGroup(env, message);
+    await verifyAdsGroup(env, message, args);
     return;
   }
 
@@ -2928,7 +2945,7 @@ function parseAdminAdButtons(raw) {
 async function broadcastAdminAdToGroups(env) {
   const content = await getAdminAdContent(env);
   const replyMarkup = { inline_keyboard: content.buttons.map(button => [{ text: button.text, url: button.url }]) };
-  const rows = await env.DB.prepare("SELECT chat_id FROM telegram_chats WHERE active=1 AND type IN ('group','supergroup') ORDER BY updated_at DESC").all();
+  const rows = await env.DB.prepare("SELECT chat_id FROM telegram_chats WHERE active=1 AND type IN ('group','supergroup','channel') ORDER BY updated_at DESC").all();
   const targets = rows.results || [];
   let sent = 0;
   let failed = 0;
@@ -2992,9 +3009,9 @@ async function runTelegramAdsScheduler(env) {
     if (account.plan === "paid" && !paid) {
       await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free', paid_until=NULL, updated_at=? WHERE telegram_user_id=?").bind(nowSql(), userId).run();
     }
-    const groupRows = await env.DB.prepare("SELECT chat_id FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1 ORDER BY verified_at").bind(userId).all();
-    const groups = groupRows.results || [];
-    if (groups.length < (paid ? 1 : 3)) continue;
+    const targetRows = await env.DB.prepare("SELECT chat_id,chat_type FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1 ORDER BY verified_at").bind(userId).all();
+    const targets = targetRows.results || [];
+    if (targets.length < (paid ? 1 : 3)) continue;
     const interval = paid ? 30 : 60;
     const nextRun = adsSqlAfterMinutes(interval);
     const claim = await env.DB.prepare("UPDATE telegram_ads_accounts SET next_run_at=?, updated_at=? WHERE telegram_user_id=? AND (next_run_at IS NULL OR next_run_at<=?)").bind(nextRun, nowSql(), userId, now).run();
@@ -3028,15 +3045,15 @@ async function runTelegramAdsScheduler(env) {
     }
     const choice = eligible[Math.floor(Math.random() * eligible.length)];
     let sent = 0;
-    for (const group of groups) {
+    for (const target of targets) {
       try {
-        await sendProductMediaToTelegram(env, group.chat_id, choice.product);
+        await sendProductMediaToTelegram(env, target.chat_id, choice.product);
         sent++;
       } catch (error) {
         const message = String(error.message || error);
-        console.error("Ads send failed", group.chat_id, message);
+        console.error("Ads send failed", target.chat_id, message);
         if (/bot was blocked|CHAT_WRITE_FORBIDDEN|chat not found|not enough rights/i.test(message)) {
-          await env.DB.prepare("UPDATE telegram_ads_verified_chats SET active=0 WHERE chat_id=? AND telegram_user_id=?").bind(String(group.chat_id), userId).run();
+          await env.DB.prepare("UPDATE telegram_ads_verified_chats SET active=0 WHERE chat_id=? AND telegram_user_id=?").bind(String(target.chat_id), userId).run();
         }
       }
     }
