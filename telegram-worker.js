@@ -1942,7 +1942,7 @@ async function handleTelegramUpdate(update, env) {
     return;
   }
 
-  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel","setadsqr","showadsqr","removeadsqr"]);
+  const allowedCommands = new Set(["start","help","connect","profile","products","browse","latest","search","categories","category","cat","featured","special","product","link","share","addproduct","myproducts","editproduct","deleteproduct","disconnect","adsrun","adsverify","myid","getid","id","cancel","admin","lock","broadcast","globalgroupmsg","globalusermsg","sendto","channel","chats","chatlist","refreshchat","registerchat","stats","paymentdts","setadsqr","showadsqr","removeadsqr"]);
   if (text.startsWith("/") && !allowedCommands.has(command)) {
     await telegramApi(env, "sendMessage", { chat_id: chatId, text: "That command is no longer available. Use /help to see the new command list." });
     return;
