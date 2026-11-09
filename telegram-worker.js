@@ -1041,7 +1041,7 @@ async function chatsText(env) {
       const name = row.title || (row.username ? `@${row.username}` : "Private chat");
       const state = Number(row.active) === 1 ? "✅" : "⛔";
       return `${i + 1}. ${escapeTelegramHtml(name)}\n` +
-        `   <code>${escapeHtml(row.chat_id)}</code> · ${escapeTelegramHtml(row.type || "unknown")} · ${state}`;
+        `   <code>${escapeTelegramHtml(row.chat_id)}</code> · ${escapeTelegramHtml(row.type || "unknown")} · ${state}`;
     }).join("\n\n")
   );
 }
