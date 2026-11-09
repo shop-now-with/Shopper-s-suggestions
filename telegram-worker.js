@@ -1717,6 +1717,7 @@ async function verifyAdsGroup(env, message, args = "") {
   const nextBatch = batchComplete ? adsSqlAfterDays(20) : (account?.next_group_batch_at || null);
   await env.DB.prepare("INSERT INTO telegram_ads_verified_chats (chat_id,telegram_user_id,chat_type,title,verified_at,active,batch_number) VALUES (?,?,?,?,?,1,?) ON CONFLICT(chat_id) DO UPDATE SET telegram_user_id=excluded.telegram_user_id,chat_type=excluded.chat_type,title=excluded.title,verified_at=excluded.verified_at,active=1,batch_number=excluded.batch_number")
     .bind(chatId, telegramUserId, targetChat.type, cleanText(targetChat.title || targetChat.username || "Telegram chat", 200), nowSql(), batchNumber).run();
+  await recordTelegramChat(env, targetChat);
   await env.DB.prepare("UPDATE telegram_ads_accounts SET groups_in_batch=?,batch_number=?,next_group_batch_at=?,next_run_at=CASE WHEN ? >= 3 THEN ? ELSE next_run_at END,updated_at=? WHERE telegram_user_id=?")
     .bind(newCount % 3, batchNumber, nextBatch, newCount, nowSql(), nowSql(), telegramUserId).run();
 
@@ -2397,11 +2398,10 @@ async function handleTelegramUpdate(update, env) {
 
   if (command === "globalgroupmsg" || command === "globalusermsg") {
     if (!args) {
-      const example = command === "globalgroupmsg" ? "/globalgroupmsg New community update!" : "/globalusermsg A new update is available!";
+      const example = "/" + command + " New community update!";
       await telegramApi(env, "sendMessage", { chat_id: chatId, text: "📣 Add your message after the command.\n\nExample:\n<code>" + escapeHtml(example) + "</code>", parse_mode: "HTML" });
       return;
     }
-    const groupsOnly = command === "globalgroupmsg";
     const result = await broadcastToTelegram(env, args, ["group", "supergroup", "channel"]);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
@@ -2810,7 +2810,7 @@ async function handleTelegramUpdate(update, env) {
         : await createProductFromTelegramSession(env, chatId);
       const delivery = created.telegramResult || {};
       const deliveryLine = Number(delivery.sent || 0) > 0
-        ? `📣 Delivered to ${delivery.sent}/${delivery.total || delivery.sent} Telegram group(s).`
+        ? `📣 Delivered to ${delivery.sent}/${delivery.total || delivery.sent} Telegram group(s)/channel(s).`
         : "⚠️ Saved on the website, but not delivered to Telegram yet.";
       const failureLine = delivery.failures?.length
         ? `\n⚠️ ${delivery.failures.length} group(s) could not receive it. Check the bot's posting permissions.`
