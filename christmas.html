@@ -1,1 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#102b24">
+<title>Christmas Letter Studio · Shopper's Suggestions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=DM+Sans:wght@400;500;600;700;800&family=Dancing+Script:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#102b24;--forest2:#183d31;--red:#b9363e;--gold:#e8c77b;--cream:#fff8e9;--ink:#21352d;--muted:#718078;--line:rgba(32,61,48,.13);--shadow:0 22px 70px rgba(5,22,16,.2)}
+*{box-sizing:border-box}html{min-height:100%;background:#102b24}body{margin:0;min-height:100vh;color:var(--ink);font-family:"DM Sans",sans-serif;background:radial-gradient(circle at 12% 4%,rgba(205,54,65,.23),transparent 27%),radial-gradient(circle at 90% 20%,rgba(223,187,108,.16),transparent 24%),linear-gradient(145deg,#0d241e,#17392e 55%,#102b24);overflow-x:hidden}
+button,input,textarea,select{font:inherit}button{cursor:pointer}.snow{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}.snow i{position:absolute;top:-12px;width:4px;height:4px;border-radius:50%;background:#fff;opacity:.65;animation:fall linear infinite}.snow i:nth-child(1){left:8%;animation-duration:12s}.snow i:nth-child(2){left:19%;animation-duration:17s;animation-delay:-5s}.snow i:nth-child(3){left:31%;animation-duration:14s;animation-delay:-9s}.snow i:nth-child(4){left:46%;animation-duration:19s;animation-delay:-3s}.snow i:nth-child(5){left:59%;animation-duration:13s;animation-delay:-7s}.snow i:nth-child(6){left:72%;animation-duration:16s;animation-delay:-11s}.snow i:nth-child(7){left:86%;animation-duration:18s;animation-delay:-2s}.snow i:nth-child(8){left:95%;animation-duration:15s;animation-delay:-8s}@keyframes fall{to{transform:translate3d(35px,110vh,0);opacity:.08}}
+.site{position:relative;z-index:1;max-width:1440px;margin:auto;padding:22px clamp(14px,3vw,42px) 34px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;color:#fff;margin-bottom:30px}.brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:.02em}.brand-mark{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,#d34a4e,#8f202c);box-shadow:0 7px 20px #0004;font-size:22px}.brand small{display:block;font-size:10px;letter-spacing:.2em;color:#d8c79f;font-weight:600;margin-top:2px}.top-actions{display:flex;gap:9px;align-items:center}.ghost-link,.top-btn{border:1px solid #ffffff35;background:#ffffff0d;color:#fff;padding:10px 14px;border-radius:999px;text-decoration:none;font-size:12px;font-weight:700}.top-btn:hover,.ghost-link:hover{background:#ffffff20}
+.hero{text-align:center;color:#fff;margin:0 auto 26px;max-width:760px}.eyebrow{color:#e8c77b;text-transform:uppercase;letter-spacing:.25em;font-size:10px;font-weight:800}.hero h1{font-family:"Dancing Script",cursive;font-size:clamp(42px,6vw,70px);line-height:1;margin:10px 0 8px;font-weight:700}.hero p{color:#d9e3dc;margin:0;font-size:14px;line-height:1.6}
+.studio{display:grid;grid-template-columns:220px minmax(300px,1fr) 300px;gap:14px;align-items:stretch}.panel,.canvas-card{border:1px solid #ffffff26;background:rgba(255,250,238,.97);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}.panel-head{padding:17px 18px 12px;border-bottom:1px solid var(--line)}.panel-head b{display:block;font-size:13px}.panel-head small{color:var(--muted);font-size:11px}.tool-list{padding:12px;display:grid;gap:7px}.tool-btn{display:flex;align-items:center;gap:11px;width:100%;padding:12px;border:1px solid transparent;background:transparent;border-radius:13px;text-align:left;color:#34473e;font-weight:700;font-size:12px}.tool-btn span:first-child{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#e9eee6;font-size:16px}.tool-btn.active{background:#e9efe8;border-color:#d8e2d7;color:#173e2e}.tool-btn:hover{background:#f0f2eb}.left-note{margin:8px 14px 15px;padding:12px;border-radius:13px;background:#f5efe1;color:#74674f;font-size:10px;line-height:1.5}
+.canvas-card{display:flex;flex-direction:column;min-height:620px}.canvas-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 17px;border-bottom:1px solid var(--line);background:#fffdf8}.canvas-toolbar strong{font-size:12px}.canvas-toolbar small{display:block;color:var(--muted);font-size:10px;margin-top:3px}.toolbar-actions{display:flex;gap:7px}.mini-btn{border:1px solid #dce2d9;background:#fff;border-radius:10px;padding:9px 11px;font-size:11px;font-weight:800;color:#31463b}.mini-btn.primary{background:var(--forest);color:#fff;border-color:var(--forest)}.mini-btn:disabled{opacity:.5;cursor:not-allowed}
+.stage-wrap{flex:1;display:grid;place-items:center;padding:clamp(14px,3vw,34px);background-color:#e9e5d9;background-image:radial-gradient(#9da99a55 .8px,transparent .8px);background-size:16px 16px}.stage{width:min(100%,650px);aspect-ratio:1.25/1;position:relative;display:grid;place-items:center;border-radius:17px;overflow:hidden;background:linear-gradient(145deg,#f7f1e4,#e5e2d4);box-shadow:inset 0 0 0 1px #fff9,0 14px 35px #172a1c25}.stage:before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,#ffffff80,transparent 72%);pointer-events:none}.stage-label{position:absolute;top:14px;left:16px;font-size:9px;letter-spacing:.17em;text-transform:uppercase;color:#7b8579;font-weight:800}.envelope{--env:#b9363e;--env-dark:#8e2833;position:relative;width:min(72%,390px);aspect-ratio:1.58/1;border-radius:12px;background:var(--env);box-shadow:0 22px 38px #17291f38;overflow:visible;transform:rotate(-2deg);transition:transform .3s,background .25s}.envelope:before{content:"";position:absolute;inset:0;border-radius:12px;background:linear-gradient(135deg,#ffffff19,transparent 45%,#00000012);z-index:1;pointer-events:none}.env-pocket{position:absolute;inset:0;border-radius:12px;overflow:hidden;background:linear-gradient(145deg,var(--env),var(--env-dark))}.env-pocket:before,.env-pocket:after{content:"";position:absolute;bottom:-1px;width:0;height:0;border-style:solid;z-index:2}.env-pocket:before{left:0;border-width:0 0 145px 205px;border-color:transparent transparent #ffffff18 transparent}.env-pocket:after{right:0;border-width:145px 0 0 205px;border-color:transparent transparent transparent #00000012}.env-flap{position:absolute;top:0;left:0;width:100%;height:62%;background:var(--env);clip-path:polygon(0 0,100% 0,50% 100%);transform-origin:top;filter:brightness(.92);z-index:3;transition:transform .8s cubic-bezier(.2,.75,.25,1);backface-visibility:visible}.env-seal{position:absolute;z-index:4;left:50%;top:46%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#f2dca5,#a87936);color:#693d20;border:2px solid #f5dfaa;box-shadow:0 4px 10px #0003;font-size:18px}.env-address{position:absolute;z-index:4;left:0;right:0;bottom:18px;text-align:center;color:#fff5e7;text-shadow:0 1px 2px #0004;font-family:"Caveat",cursive;font-size:clamp(20px,3vw,29px);font-weight:700}.env-from{position:absolute;z-index:4;top:13px;left:15px;color:#fff9;font-size:9px;letter-spacing:.08em}.env-pattern{position:absolute;inset:8px;border:1px solid #ffffff3b;border-radius:8px;z-index:2;pointer-events:none}.pattern-stripes{background:repeating-linear-gradient(135deg,transparent 0 12px,#ffffff14 12px 18px)}.pattern-holly:after{content:"🌿  ✦  🌿";position:absolute;top:7px;right:10px;color:#fff;font-size:15px}.pattern-snow:after{content:"❄  ✧  ❄";position:absolute;top:7px;right:10px;color:#fff9;font-size:14px}.sticker-layer{position:absolute;inset:0;z-index:8;pointer-events:none}.sticker{position:absolute;pointer-events:auto;touch-action:none;user-select:none;cursor:grab;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 4px #0003);animation:stickerBob 3.5s ease-in-out infinite}.sticker:active{cursor:grabbing}.sticker.selected{outline:1px dashed #fff;outline-offset:5px;border-radius:8px}@keyframes stickerBob{50%{translate:0 -5px}}.photo-layer{position:absolute;z-index:7;left:8%;top:12%;width:23%;max-height:35%;object-fit:cover;border:5px solid #fff;border-radius:7px;box-shadow:0 6px 18px #0003;transform:rotate(-5deg)}
+.stage-hint{position:absolute;bottom:12px;right:14px;color:#798478;font-size:9px}
+.panel-body{padding:16px;display:grid;gap:13px}.field{display:grid;gap:6px}.field label,.field-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:#66746b}.field input,.field textarea,.field select{width:100%;border:1px solid #dbe1d8;background:#fff;border-radius:10px;padding:10px 11px;color:#283d32;font-size:12px;outline:none}.field textarea{min-height:130px;resize:vertical;line-height:1.5}.field input:focus,.field textarea:focus,.field select:focus{border-color:#72927a;box-shadow:0 0 0 3px #8da78c24}.field-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.color-row{display:flex;gap:7px;flex-wrap:wrap}.swatch{width:29px;height:29px;border:2px solid #fff;box-shadow:0 0 0 1px #cdd5ca;border-radius:50%;padding:0}.swatch.active{box-shadow:0 0 0 2px #284c38}.sticker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.sticker-choice{border:1px solid #e0e5dc;background:#fff;border-radius:11px;aspect-ratio:1;display:grid;place-items:center;font-size:25px}.sticker-choice:hover{background:#f3f4ec;transform:translateY(-2px)}.subtle{font-size:10px;line-height:1.5;color:#78857b}.action-row{display:flex;gap:7px;flex-wrap:wrap}.action-row button{flex:1}.range-row{display:flex;align-items:center;gap:10px}.range-row input{flex:1;padding:0}.range-row output{font-size:11px;font-weight:800;min-width:30px;text-align:right}.empty-state{padding:18px 12px;text-align:center;border:1px dashed #cbd5c8;border-radius:12px;color:#758278;font-size:11px;line-height:1.5}
+.footer{color:#d9e4da;text-align:center;padding:28px 12px 8px;font-size:11px}.footer a{display:inline-block;color:#f2d28b;text-decoration:none;font-weight:800;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid #f2d28b70;padding-bottom:4px}.footer a:hover{color:#fff}
+.recipient{max-width:850px;margin:30px auto 0;text-align:center;color:#fff}.recipient .eyebrow{margin-bottom:12px}.recipient h1{font:700 clamp(40px,7vw,68px)/1 "Dancing Script",cursive;margin:0 0 10px}.recipient p{color:#d9e3dc;font-size:13px}.recipient-stage{margin:30px auto 22px;max-width:680px;min-height:410px;display:grid;place-items:center;padding:25px;border-radius:25px;background:linear-gradient(145deg,#f6efdf,#e3dfd0);box-shadow:var(--shadow);position:relative;overflow:hidden}.recipient-stage:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0,#fff9,transparent 65%)}.recipient-envelope{width:min(80%,440px);aspect-ratio:1.58/1;position:relative;perspective:1000px;cursor:pointer;z-index:2}.recipient-envelope .envelope{width:100%;height:100%;aspect-ratio:auto;transform:none}.recipient-envelope.opened .env-flap{transform:rotateX(180deg)}.recipient-envelope.opened .env-seal{opacity:0;transform:translate(-50%,-50%) scale(.2);transition:.35s}.open-prompt{position:absolute;left:0;right:0;bottom:-42px;color:#6d786e;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.letter-card{position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,10%) scale(.78);width:min(84%,390px);min-height:260px;padding:26px 25px 22px;border-radius:5px;background:#fff9e9;color:#263b2e;box-shadow:0 14px 34px #0003;opacity:0;transition:transform 1s cubic-bezier(.18,.82,.24,1),opacity .65s;pointer-events:none;text-align:left}.letter-card.revealed{opacity:1;transform:translate(-50%,-45%) scale(1);z-index:5;pointer-events:auto}.letter-card:before{content:"";position:absolute;inset:9px;border:1px solid #d7c89f;pointer-events:none}.letter-to{font-size:11px;color:#8b6e3d;font-weight:800;margin-bottom:13px}.letter-message{position:relative;z-index:1;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.35;margin:0;font-size:25px}.letter-from{position:relative;z-index:1;text-align:right;margin-top:18px;font-family:"Caveat",cursive;font-size:23px;color:#7d3d36}.letter-photo{display:block;max-width:100%;max-height:120px;object-fit:cover;margin:0 auto 12px;border:5px solid white;box-shadow:0 3px 12px #0002}.font-caveat{font-family:"Caveat",cursive}.font-serif{font-family:Georgia,serif}.font-sans{font-family:"DM Sans",sans-serif}.font-dancing{font-family:"Dancing Script",cursive}.font-mono{font-family:ui-monospace,monospace}.anim-fade{animation:fadeIn 1.4s both}.anim-float{animation:letterFloat 4s ease-in-out infinite}.anim-sparkle{text-shadow:0 0 9px #e6c66f99;animation:softSparkle 2.3s ease-in-out infinite}.anim-typewriter{animation:typeReveal 2.2s steps(36,end) both}@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}@keyframes letterFloat{50%{transform:translateY(-5px)}}@keyframes softSparkle{50%{text-shadow:0 0 15px #e6c66f,0 0 22px #e6c66f88}}@keyframes typeReveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.create-own{border:0;background:linear-gradient(135deg,#e8c77b,#d6a94f);color:#382d19;padding:14px 23px;border-radius:999px;font-size:12px;font-weight:900;box-shadow:0 8px 25px #0003}.create-own:hover{transform:translateY(-2px)}
+.overlay{position:fixed;inset:0;z-index:20;display:none;place-items:center;padding:16px;background:#071811c9;backdrop-filter:blur(9px)}.overlay.show{display:grid}.modal{width:min(100%,490px);max-height:min(88vh,760px);overflow:auto;background:#fffaf0;border-radius:22px;padding:23px;box-shadow:0 25px 90px #0006;color:#253b30}.modal h2{font:700 30px "Dancing Script",cursive;margin:0 0 5px}.modal p{font-size:12px;color:#748078;line-height:1.5}.modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:18px 0}.modal-btn{padding:13px 10px;border-radius:12px;border:1px solid #dbe2d8;background:#fff;color:#294336;font-size:12px;font-weight:800}.modal-btn.primary{background:#17392d;color:white;border-color:#17392d}.result-panel{display:none;margin-top:14px;padding:14px;border-radius:14px;background:#f0f1e8;text-align:center}.result-panel.show{display:block}.qr-holder{display:grid;place-items:center;padding:10px}.qr-holder img,.qr-holder canvas{max-width:100%;height:auto!important}.link-field{display:flex;gap:7px}.link-field input{min-width:0;flex:1;border:1px solid #d5ddd2;border-radius:9px;padding:10px;font-size:11px;background:#fff}.copy-btn{border:0;background:#b9363e;color:white;border-radius:9px;padding:0 13px;font-size:11px;font-weight:800}.expiry-note{font-size:10px!important;color:#8a806e!important;margin-top:12px}.close-modal{float:right;border:0;background:#e9ece5;width:30px;height:30px;border-radius:50%;font-size:18px}.loading-card{width:min(100%,350px);padding:28px;border-radius:22px;background:#fff9ed;text-align:center;color:#294235;box-shadow:var(--shadow)}.loader{width:48px;height:48px;border:4px solid #e6e5d9;border-top-color:#b9363e;border-radius:50%;margin:0 auto 17px;animation:spin .85s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.progress{height:6px;background:#e5e8de;border-radius:9px;overflow:hidden;margin-top:18px}.progress i{display:block;height:100%;width:30%;background:linear-gradient(90deg,#b9363e,#e4c277);border-radius:9px;animation:progress 1.5s ease-in-out infinite}@keyframes progress{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
+.toast{position:fixed;left:50%;bottom:24px;z-index:40;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#fdf8eb;color:#243b2e;padding:11px 16px;border-radius:999px;font-size:11px;font-weight:800;box-shadow:0 8px 30px #0004;transition:.25s}.toast.show{opacity:1;transform:translate(-50%,0)}.error-box{margin:20px auto;padding:18px;border-radius:15px;background:#fff3e8;color:#813c2b;max-width:520px;font-size:13px}
+@media(max-width:1050px){.studio{grid-template-columns:190px minmax(280px,1fr)}.right-panel{grid-column:1/-1}.right-panel .panel-body{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.right-panel .panel-head{grid-column:1/-1}}
+@media(max-width:700px){.site{padding:14px 11px 25px}.topbar{margin-bottom:20px}.brand-mark{width:34px;height:34px}.top-actions .ghost-link{display:none}.hero{margin-bottom:18px}.hero h1{font-size:47px}.hero p{font-size:12px}.studio{display:flex;flex-direction:column;gap:10px}.canvas-card{order:0;min-height:0}.canvas-toolbar{padding:11px 12px}.toolbar-actions .mini-btn{padding:8px 9px}.stage-wrap{padding:13px}.stage{width:100%;aspect-ratio:1.08/1}.envelope{width:79%}.left-panel{order:1}.left-panel .panel-head{display:none}.tool-list{display:flex;overflow-x:auto;padding:9px;gap:6px}.tool-btn{width:auto;min-width:max-content;padding:7px 9px;gap:6px;font-size:10px}.tool-btn span:first-child{width:27px;height:27px}.left-note{display:none}.right-panel{order:2}.right-panel .panel-body{grid-template-columns:1fr}.right-panel .panel-head{display:none}.recipient{margin-top:18px}.recipient-stage{min-height:380px;padding:15px}.recipient-envelope{width:88%}.letter-card{width:88%;padding:22px 20px;min-height:245px}.letter-message{font-size:22px}.modal{padding:19px}.footer{padding-top:24px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="snow" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<div class="site">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">🎄</div><div>SHOPPER'S SUGGESTIONS<small>CHRISTMAS LETTER STUDIO</small></div></div>
+    <div class="top-actions"><a class="ghost-link" href="/">← Back to home</a><button class="top-btn" id="topHelp" type="button">How it works</button></div>
+  </header>
 
+  <main id="editorView">
+    <section class="hero"><div class="eyebrow">A little Christmas magic</div><h1>Send a little wonder.</h1><p>Design a personal Christmas envelope, add your message, then share it with a private link or QR code.</p></section>
+    <section class="studio">
+      <aside class="panel left-panel">
+        <div class="panel-head"><b>Your creative tools</b><small>Make this envelope yours</small></div>
+        <div class="tool-list">
+          <button class="tool-btn active" data-tool="stickers"><span>🎁</span>Stickers</button>
+          <button class="tool-btn" data-tool="text"><span>✍️</span>Letter text</button>
+          <button class="tool-btn" data-tool="background"><span>🎨</span>Backgrounds</button>
+          <button class="tool-btn" data-tool="envelope"><span>✉️</span>Edit envelope</button>
+          <button class="tool-btn" data-tool="photo"><span>📷</span>Add a photo</button>
+        </div>
+        <div class="left-note">Tip: Tap a sticker to add it. Drag stickers around the canvas. Your finished design is saved for seven days after export.</div>
+      </aside>
+
+      <section class="canvas-card">
+        <div class="canvas-toolbar">
+          <div><strong>YOUR CHRISTMAS CANVAS</strong><small>Live preview · Mobile & desktop</small></div>
+          <div class="toolbar-actions"><button class="mini-btn" id="undoBtn" type="button">↶ Undo</button><button class="mini-btn" id="previewBtn" type="button">Preview</button><button class="mini-btn primary" id="exportBtn" type="button">Export ↗</button></div>
+        </div>
+        <div class="stage-wrap">
+          <div class="stage" id="stage">
+            <div class="stage-label">✦ Your envelope ✦</div>
+            <div class="envelope" id="editorEnvelope">
+              <div class="env-pocket"></div><div class="env-flap"></div><div class="env-pattern" id="editorPattern"></div>
+              <div class="env-from" id="envFrom">FROM: YOU</div><div class="env-seal">✦</div><div class="env-address" id="envTo">To someone special</div>
+            </div>
+            <img class="photo-layer" id="photoLayer" alt="" hidden>
+            <div class="sticker-layer" id="stickerLayer"></div>
+            <div class="stage-hint">Select & drag decorations</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel right-panel">
+        <div class="panel-head"><b id="toolTitle">Sticker library</b><small id="toolSubtitle">Add a little festive detail</small></div>
+        <div class="panel-body" id="toolPanel"></div>
+      </aside>
+    </section>
+  </main>
+
+  <main id="recipientView" hidden>
+    <section class="recipient">
+      <div class="eyebrow">A Christmas surprise, just for you</div>
+      <h1 id="recipientHeading">You've got a letter!</h1>
+      <p id="recipientSub">Someone sent a little Christmas magic your way.</p>
+      <div class="recipient-stage">
+        <div class="letter-card" id="letterCard">
+          <div class="letter-to" id="letterTo"></div>
+          <img class="letter-photo" id="letterPhoto" alt="" hidden>
+          <p class="letter-message" id="letterMessage"></p>
+          <div class="letter-from" id="letterFrom"></div>
+        </div>
+        <div class="recipient-envelope" id="recipientEnvelope" role="button" tabindex="0" aria-label="Open your Christmas envelope">
+          <div class="envelope" id="recipientEnvelopeSkin">
+            <div class="env-pocket"></div><div class="env-flap"></div><div class="env-pattern" id="recipientPattern"></div>
+            <div class="env-from" id="recipientFrom"></div><div class="env-seal">✦</div><div class="env-address" id="recipientTo">For you</div>
+          </div>
+          <div class="open-prompt" id="openPrompt">Tap the envelope to open your letter ✨</div>
+        </div>
+      </div>
+      <button class="create-own" id="createOwn" type="button">create one your self! ✨</button>
+      <p id="expiryText" class="subtle" style="margin-top:16px"></p>
+    </section>
+  </main>
+
+  <footer class="footer"><a href="/">earn money with us! Join shopperssuggestions!</a></footer>
+</div>
+
+<div class="overlay" id="loadingOverlay"><div class="loading-card"><div class="loader"></div><b>Wrapping up your Christmas surprise…</b><p>Saving your design and preparing your private sharing link.</p><div class="progress"><i></i></div></div></div>
+<div class="overlay" id="exportOverlay">
+  <div class="modal">
+    <button class="close-modal" data-close="exportOverlay" aria-label="Close">×</button>
+    <h2>Your letter is ready!</h2><p>Choose how you want to share this envelope. The same private link works in both options.</p>
+    <div class="modal-actions"><button class="modal-btn primary" id="showQr" type="button">▦ Generate QR code</button><button class="modal-btn" id="showLink" type="button">↗ Generate link</button></div>
+    <div class="result-panel" id="qrPanel"><b>Scan to open your letter</b><div class="qr-holder" id="qrHolder"></div><p class="subtle">Anyone with this QR code can open the letter until it expires.</p></div>
+    <div class="result-panel" id="linkPanel"><b>Your shareable link</b><div class="link-field" style="margin-top:10px"><input id="shareLink" readonly aria-label="Share link"><button class="copy-btn" id="copyLink" type="button">Copy</button></div></div>
+    <p class="expiry-note" id="shareExpiry">This envelope will be permanently deleted after seven days.</p>
+  </div>
+</div>
+<div class="overlay" id="previewOverlay">
+  <div class="modal">
+    <button class="close-modal" data-close="previewOverlay" aria-label="Close">×</button>
+    <h2>Preview your envelope</h2><p>Tap the envelope to see how your friend will open it.</p>
+    <div class="recipient-stage" style="min-height:340px;margin:12px 0">
+      <div class="letter-card" id="previewLetter"><div class="letter-to" id="previewTo"></div><img class="letter-photo" id="previewPhoto" alt="" hidden><p class="letter-message" id="previewMessage"></p><div class="letter-from" id="previewFrom"></div></div>
+      <div class="recipient-envelope" id="previewEnvelope" role="button" tabindex="0">
+        <div class="envelope" id="previewEnvelopeSkin"><div class="env-pocket"></div><div class="env-flap"></div><div class="env-pattern" id="previewPattern"></div><div class="env-from" id="previewEnvFrom"></div><div class="env-seal">✦</div><div class="env-address" id="previewEnvTo"></div></div>
+        <div class="open-prompt">Tap to open</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+<script>
+(function(){
+"use strict";
+const API="/api/christmas/letters";
+const $=id=>document.getElementById(id);
+const stickerChoices=["🎅","🎄","⛄","🦌","🎁","🔔","❄️","⭐","✨","🕯️","🍪","🧦","🛷","🌟","❤️","🍬","🧸","🌲","🪽","☃️","🦌","🎀","🧤","🧣"];
+const envelopeColors={red:"#b9363e",green:"#26714d",cream:"#d9c59b",navy:"#263b59",gold:"#bd9144"};
+const paperColors={cream:"#fff8e9",white:"#ffffff",green:"#eef5e9",red:"#fff0ed",night:"#e9edf9"};
+const fontNames={caveat:"Caveat",serif:"serif",sans:"DM Sans",dancing:"Dancing Script",mono:"monospace"};
+let state={to:"",from:"",message:"",font:"caveat",textColor:"#284536",fontSize:24,textAnimation:"fade",paper:"cream",envelope:"red",pattern:"snow",stickers:[],photo:""};
+let activeTool="stickers",selectedSticker=null,history=[],shareUrl="",expiresAt="";
+const editorView=$("editorView"),recipientView=$("recipientView"),toolPanel=$("toolPanel");
+function toast(message){const t=$("toast");t.textContent=message;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2300)}
+function saveHistory(){history.push(JSON.stringify(state));if(history.length>30)history.shift()}
+function undo(){if(!history.length){toast("Nothing to undo yet");return}state=JSON.parse(history.pop());selectedSticker=null;renderStage();renderToolPanel()}
+function setTool(name){activeTool=name;document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===name));renderToolPanel()}
+function renderStage(){
+ const env=$("editorEnvelope");env.style.setProperty("--env",envelopeColors[state.envelope]||envelopeColors.red);env.style.setProperty("--env-dark",shade(envelopeColors[state.envelope]||envelopeColors.red));
+ $("envTo").textContent=state.to?"To: "+state.to:"To someone special";$("envFrom").textContent=state.from?"FROM: "+state.from.toUpperCase():"FROM: YOU";
+ $("editorPattern").className="env-pattern pattern-"+state.pattern;
+ $("photoLayer").hidden=!state.photo;if(state.photo)$("photoLayer").src=state.photo;
+ const layer=$("stickerLayer");layer.innerHTML="";
+ state.stickers.forEach(st=>{
+  const el=document.createElement("div");el.className="sticker"+(st.id===selectedSticker?" selected":"");el.textContent=st.emoji;el.dataset.id=st.id;
+  el.style.left=st.x+"%";el.style.top=st.y+"%";el.style.fontSize=st.size+"px";el.style.rotate=st.rotation+"deg";layer.appendChild(el);
+ });
+}
+function shade(hex){const n=parseInt(hex.slice(1),16);const r=Math.max(0,((n>>16)&255)-35),g=Math.max(0,((n>>8)&255)-35),b=Math.max(0,(n&255)-35);return "rgb("+r+","+g+","+b+")"}
+function field(label,html){return '<div class="field"><label>'+label+'</label>'+html+'</div>'}
+function renderToolPanel(){
+ const title=$("toolTitle"),sub=$("toolSubtitle");let content="";
+ if(activeTool==="stickers"){
+  title.textContent="Sticker library";sub.textContent="Tap to add · Drag to position";
+  content='<div class="subtle">Pick a decoration to place on your envelope. Select one on the canvas to resize, rotate or remove it.</div><div class="sticker-grid">'+stickerChoices.map((v,i)=>'<button class="sticker-choice" type="button" data-add-sticker="'+i+'" aria-label="Add '+v+'">'+v+'</button>').join("")+'</div>';
+  const st=state.stickers.find(x=>x.id===selectedSticker);
+  if(st)content+='<div class="field"><label>Selected sticker · '+st.emoji+'</label><div class="range-row"><input type="range" min="22" max="96" value="'+st.size+'" id="stickerSize"><output>'+st.size+'</output></div></div><div class="action-row"><button class="mini-btn" type="button" id="rotateSticker">↻ Rotate</button><button class="mini-btn" type="button" id="removeSticker">Remove</button></div>';
+  else content+='<div class="empty-state">No sticker selected. Tap a sticker on your canvas to edit it.</div>';
+ }else if(activeTool==="text"){
+  title.textContent="Letter text";sub.textContent="Write and style your message";
+  content=field("To",'<input id="fieldTo" data-field="to" maxlength="80" placeholder="Who is this letter for?" value="'+esc(state.to)+'">')+
+   field("Your message",'<textarea id="fieldMessage" data-field="message" maxlength="5000" placeholder="Write something kind…">'+esc(state.message)+'</textarea>')+
+   field("From",'<input id="fieldFrom" data-field="from" maxlength="80" placeholder="Your name" value="'+esc(state.from)+'">')+
+   field("Font",'<select data-field="font"><option value="caveat">Handwritten</option><option value="dancing">Festive script</option><option value="serif">Classic serif</option><option value="sans">Modern</option><option value="mono">Typewriter</option></select>')+
+   field("Text colour",'<input type="color" data-field="textColor" value="'+state.textColor+'">')+
+   field("Text size",'<div class="range-row"><input type="range" min="14" max="44" value="'+state.fontSize+'" data-field="fontSize"><output>'+state.fontSize+'px</output></div>')+
+   field("Text animation",'<select data-field="textAnimation"><option value="fade">Soft reveal</option><option value="typewriter">Typewriter</option><option value="float">Floating</option><option value="sparkle">Gentle sparkle</option><option value="none">None</option></select>');
+  setTimeout(()=>{const f=toolPanel.querySelector('[data-field="font"]');if(f)f.value=state.font;const a=toolPanel.querySelector('[data-field="textAnimation"]');if(a)a.value=state.textAnimation},0);
+ }else if(activeTool==="background"){
+  title.textContent="Paper & background";sub.textContent="Choose the letter's look";
+  content='<div class="field"><label>Letter paper</label><div class="color-row">'+Object.keys(paperColors).map(k=>'<button type="button" class="swatch '+(state.paper===k?'active':'')+'" data-paper="'+k+'" title="'+k+'" style="background:'+paperColors[k]+'"></button>').join("")+'</div></div><div class="subtle">The paper colour appears behind the message when your friend opens the envelope.</div>';
+ }else if(activeTool==="envelope"){
+  title.textContent="Edit envelope";sub.textContent="Choose the envelope style";
+  content='<div class="field"><label>Envelope colour</label><div class="color-row">'+Object.keys(envelopeColors).map(k=>'<button type="button" class="swatch '+(state.envelope===k?'active':'')+'" data-envelope="'+k+'" title="'+k+'" style="background:'+envelopeColors[k]+'"></button>').join("")+'</div></div><div class="field"><label>Envelope pattern</label><select id="patternSelect"><option value="snow">Snowflakes</option><option value="stripes">Festive stripes</option><option value="holly">Holly leaves</option><option value="plain">Plain</option></select></div><div class="subtle">The envelope opens with a flap and wax-seal animation when your friend visits the shared link.</div>';
+  setTimeout(()=>{const p=$("patternSelect");if(p)p.value=state.pattern},0);
+ }else if(activeTool==="photo"){
+  title.textContent="Add a photo";sub.textContent="Include a favourite memory";
+  content='<div class="field"><label>Choose a photo</label><input id="photoInput" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="subtle">Your photo is resized and compressed in your browser before it is saved with the letter. One photo per letter.</div>'+(state.photo?'<button class="mini-btn" type="button" id="removePhoto">Remove photo</button>':'');
+ }
+ toolPanel.innerHTML=content;
+}
+function esc(v){return String(v||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+document.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>setTool(b.dataset.tool)));
+toolPanel.addEventListener("click",e=>{
+ const add=e.target.closest("[data-add-sticker]");if(add){saveHistory();const emoji=stickerChoices[Number(add.dataset.addSticker)];const id=Date.now().toString(36)+Math.random().toString(36).slice(2,7);state.stickers.push({id,emoji,x:50,y:50,size:42,rotation:0});selectedSticker=id;renderStage();renderToolPanel();return}
+ const paper=e.target.closest("[data-paper]");if(paper){saveHistory();state.paper=paper.dataset.paper;renderToolPanel();return}
+ const env=e.target.closest("[data-envelope]");if(env){saveHistory();state.envelope=env.dataset.envelope;renderStage();renderToolPanel();return}
+ if(e.target.id==="rotateSticker"){const st=state.stickers.find(x=>x.id===selectedSticker);if(st){saveHistory();st.rotation=(st.rotation+15)%360;renderStage();renderToolPanel()}}
+ if(e.target.id==="removeSticker"){saveHistory();state.stickers=state.stickers.filter(x=>x.id!==selectedSticker);selectedSticker=null;renderStage();renderToolPanel()}
+ if(e.target.id==="removePhoto"){saveHistory();state.photo="";renderStage();renderToolPanel()}
+});
+toolPanel.addEventListener("input",e=>{
+ const el=e.target,field=el.dataset.field;if(field){if(field==="fontSize")state.fontSize=Number(el.value);else state[field]=el.value;if(field==="to"||field==="from"||field==="message")renderStage();const out=el.parentElement.querySelector("output");if(out)out.textContent=field==="fontSize"?el.value+"px":el.value}
+ if(el.id==="stickerSize"){const st=state.stickers.find(x=>x.id===selectedSticker);if(st){st.size=Number(el.value);renderStage();const out=el.parentElement.querySelector("output");if(out)out.textContent=el.value}}
+});
+toolPanel.addEventListener("change",e=>{
+ if(e.target.id==="patternSelect"){saveHistory();state.pattern=e.target.value;renderStage()}
+ if(e.target.id==="photoInput"&&e.target.files&&e.target.files[0])compressPhoto(e.target.files[0]);
+});
+async function compressPhoto(file){
+ if(!/^image\\/(png|jpeg|webp)$/.test(file.type)){toast("Please choose a PNG, JPG or WebP image");return}
+ try{const bitmap=await createImageBitmap(file);const scale=Math.min(1,760/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement("canvas");canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();let data=canvas.toDataURL("image/jpeg",.68);if(data.length>210000)data=canvas.toDataURL("image/jpeg",.48);if(data.length>240000){toast("That photo is too large. Try a smaller image.");return}saveHistory();state.photo=data;renderStage();renderToolPanel();toast("Photo added to your design")}catch(err){toast("Could not load that photo")}}
+let drag=null;
+$("stage").addEventListener("pointerdown",e=>{const el=e.target.closest(".sticker");if(!el)return;const st=state.stickers.find(x=>x.id===el.dataset.id);if(!st)return;selectedSticker=st.id;drag={id:st.id};el.setPointerCapture?.(e.pointerId);renderToolPanel();renderStage()});
+window.addEventListener("pointermove",e=>{if(!drag)return;const rect=$("stage").getBoundingClientRect();const st=state.stickers.find(x=>x.id===drag.id);if(!st)return;st.x=Math.max(0,Math.min(100,(e.clientX-rect.left)/rect.width*100));st.y=Math.max(0,Math.min(100,(e.clientY-rect.top)/rect.height*100));renderStage()});
+window.addEventListener("pointerup",()=>{if(drag){drag=null;renderToolPanel()}});
+$("undoBtn").addEventListener("click",undo);
+function fillLetterCard(prefix,container,card){
+ const env=container,skin=$(prefix+"EnvelopeSkin");skin.style.setProperty("--env",envelopeColors[state.envelope]||envelopeColors.red);skin.style.setProperty("--env-dark",shade(envelopeColors[state.envelope]||envelopeColors.red));
+ $(prefix+"Pattern").className="env-pattern pattern-"+state.pattern;
+ $(prefix+"EnvTo").textContent=state.to?"To: "+state.to:"For you";$(prefix+"EnvFrom").textContent=state.from?"FROM: "+state.from.toUpperCase():"FROM: YOU";
+ $(prefix+"To").textContent=state.to?"For "+state.to:"A Christmas note";$(prefix+"From").textContent=state.from?"— "+state.from:"— With love";
+ $(prefix+"Message").textContent=state.message||"Wishing you a little extra joy, warmth and magic this Christmas.";
+ $(prefix+"Message").className="letter-message font-"+state.font+" anim-"+state.textAnimation;
+ $(prefix+"Message").style.color=state.textColor;$(prefix+"Message").style.fontSize=state.fontSize+"px";
+ $(prefix+"Message").parentElement.style.background=paperColors[state.paper]||paperColors.cream;
+ const photo=$(prefix+"Photo");photo.hidden=!state.photo;if(state.photo)photo.src=state.photo;
+}
+function showPreview(){fillLetterCard("preview",$("previewEnvelope"),$("previewLetter"));$("previewEnvelope").classList.remove("opened");$("previewLetter").classList.remove("revealed");$("previewOverlay").classList.add("show")}
+function openEnvelope(envelope,card,prompt){envelope.classList.add("opened");prompt.textContent="Opening your Christmas surprise…";setTimeout(()=>{card.classList.add("revealed");prompt.textContent="A little note, just for you ❤️"},780)}
+$("previewBtn").addEventListener("click",showPreview);
+$("previewEnvelope").addEventListener("click",()=>openEnvelope($("previewEnvelope"),$("previewLetter"),$("previewOverlay").querySelector(".open-prompt")));
+$("previewEnvelope").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("previewEnvelope").click()}});
+$("exportBtn").addEventListener("click",exportLetter);
+async function exportLetter(){
+ if(!state.message.trim()){setTool("text");toast("Write your message before exporting");return}
+ $("loadingOverlay").classList.add("show");
+ try{
+  const response=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({letter:state})});
+  const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Could not save your letter");
+  shareUrl=data.url;expiresAt=data.expiresAt||"";
+  $("shareLink").value=shareUrl;$("shareExpiry").textContent="This envelope will be permanently deleted after seven days. Expiry: "+(expiresAt||"7 days after export")+".";
+  $("qrPanel").classList.remove("show");$("linkPanel").classList.remove("show");$("qrHolder").innerHTML="";
+  $("loadingOverlay").classList.remove("show");$("exportOverlay").classList.add("show");
+ }catch(err){$("loadingOverlay").classList.remove("show");toast(err.message||"Export failed. Please try again.")}
+}
+$("showLink").addEventListener("click",()=>{$("linkPanel").classList.add("show");$("qrPanel").classList.remove("show")});
+$("showQr").addEventListener("click",()=>{
+ $("qrPanel").classList.add("show");$("linkPanel").classList.remove("show");$("qrHolder").innerHTML="";
+ if(window.QRCode){new QRCode($("qrHolder"),{text:shareUrl,width:210,height:210,colorDark:"#17392d",colorLight:"#fffaf0",correctLevel:QRCode.CorrectLevel.H})}
+ else{$("qrHolder").textContent="QR code library is still loading. Please try again in a moment."}
+});
+$("copyLink").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(shareUrl);toast("Share link copied!")}catch(e){$("shareLink").select();document.execCommand("copy");toast("Share link copied!")}});
+document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>$(b.dataset.close).classList.remove("show")));
+["exportOverlay","previewOverlay"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target.id===id)$(id).classList.remove("show")}));
+$("topHelp").addEventListener("click",()=>toast("Design your envelope, write a note, then export a private link or QR code."));
+$("createOwn").addEventListener("click",()=>{location.href="/christmas.html"});
+async function loadSharedLetter(token){
+ editorView.hidden=true;recipientView.hidden=false;
+ try{
+  const response=await fetch(API+"/"+encodeURIComponent(token),{cache:"no-store"});const data=await response.json();
+  if(!response.ok||!data.ok)throw new Error(data.error||"This letter is no longer available.");
+  state=data.letter;const env=$("recipientEnvelopeSkin");env.style.setProperty("--env",envelopeColors[state.envelope]||envelopeColors.red);env.style.setProperty("--env-dark",shade(envelopeColors[state.envelope]||envelopeColors.red));
+  $("recipientPattern").className="env-pattern pattern-"+state.pattern;
+  $("recipientTo").textContent=state.to?"To: "+state.to:"For you";$("recipientFrom").textContent=state.from?"FROM: "+state.from.toUpperCase():"A Christmas note";
+  $("letterTo").textContent=state.to?"For "+state.to:"A little Christmas note";$("letterFrom").textContent=state.from?"— "+state.from:"— With love";
+  $("letterMessage").textContent=state.message;$("letterMessage").className="letter-message font-"+state.font+" anim-"+state.textAnimation;$("letterMessage").style.color=state.textColor;$("letterMessage").style.fontSize=state.fontSize+"px";
+  $("letterCard").style.background=paperColors[state.paper]||paperColors.cream;
+  $("letterPhoto").hidden=!state.photo;if(state.photo)$("letterPhoto").src=state.photo;
+  const stickers=$("recipientEnvelope");(state.stickers||[]).forEach(st=>{const el=document.createElement("span");el.textContent=st.emoji;el.style.cssText="position:absolute;z-index:8;left:"+st.x+"%;top:"+st.y+"%;font-size:"+Math.min(st.size,64)+"px;transform:translate(-50%,-50%) rotate("+st.rotation+"deg);filter:drop-shadow(0 4px 4px #0003);pointer-events:none";stickers.appendChild(el)});
+  $("expiryText").textContent="This letter is available for a limited time and expires seven days after it was created.";
+  $("recipientEnvelope").addEventListener("click",()=>{if(!$("recipientEnvelope").classList.contains("opened"))openEnvelope($("recipientEnvelope"),$("letterCard"),$("openPrompt"))});
+  $("recipientEnvelope").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&!$("recipientEnvelope").classList.contains("opened")){e.preventDefault();$("recipientEnvelope").click()}});
+ }catch(err){$("recipientHeading").textContent="This letter has gone away";$("recipientSub").textContent=err.message;$("recipientEnvelope").hidden=true;$("createOwn").textContent="create one your self! ✨"}
+}
+const token=new URLSearchParams(location.search).get("letter");
+if(token)loadSharedLetter(token);else{renderStage();renderToolPanel()}
+})();
+</script>
+</body>
+</html>
