@@ -60,36 +60,28 @@
 .product-image.no-image .ss-checkout-placeholder{display:flex}
 .panel,.product-card,.promoter-card,.mail-card{transition:transform .22s ease,box-shadow .22s ease}.product-card:hover,.promoter-card:hover,.mail-card:hover,.panel:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
 
-/* Christmas season accents */
+
+/* Natural drifting snow and temporary snow caps */
+#christmasSnowCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:35;pointer-events:none}
 .christmas-initial{position:relative;display:inline-block}
-.christmas-initial:before{content:"";position:absolute;width:.58em;height:.32em;left:-.05em;top:-.13em;background:#c92732;border-radius:80% 80% 20% 20%;transform:rotate(-13deg);box-shadow:inset 0 -2px 0 rgba(120,0,0,.16);z-index:2}
-.christmas-initial:after{content:"";position:absolute;width:.19em;height:.19em;left:.39em;top:-.2em;background:#fff;border-radius:50%;box-shadow:0 .16em 0 .015em #fff;z-index:3}
+.christmas-initial img{position:absolute;width:27px;height:23px;object-fit:contain;left:-5px;top:-15px;z-index:3;pointer-events:none}
 .christmas-letter-button{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:46px;padding:8px 13px;border:1px solid #d7a33c;border-radius:14px;background:linear-gradient(135deg,#0c563b,#087447 55%,#0c563b);color:#fff!important;text-decoration:none;font-size:12px;font-weight:900;line-height:1.15;white-space:normal;text-align:center;box-shadow:0 5px 16px rgba(8,75,48,.2);overflow:hidden}
 .christmas-letter-button:before{content:"";position:absolute;inset:0;z-index:-1;background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(255,255,255,.08) 10px 11px);opacity:.65}
 .christmas-letter-button:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(8,75,48,.28)}
 .christmas-letter-button .lights-text{background:linear-gradient(90deg,#fff 0%,#ffd86a 18%,#fff 34%,#ff8d8d 50%,#fff 66%,#9fffd2 82%,#fff 100%);background-size:220% auto;background-clip:text;-webkit-background-clip:text;color:transparent;animation:christmas-lights 2.8s linear infinite;text-shadow:0 0 7px rgba(255,235,160,.45)}
 .christmas-letter-button .christmas-icon{font-size:18px;filter:drop-shadow(0 1px 2px #0005)}
 @keyframes christmas-lights{to{background-position:220% center}}
-.christmas-snow{position:fixed;inset:-20px 0 0;z-index:29;pointer-events:none;opacity:.48;background-image:radial-gradient(2px 2px at 20px 30px,#fff 98%,transparent),radial-gradient(2px 2px at 80px 90px,#d9ecff 98%,transparent),radial-gradient(1.5px 1.5px at 140px 50px,#fff 98%,transparent),radial-gradient(2px 2px at 190px 130px,#fff 98%,transparent);background-size:230px 180px;animation:christmas-snowfall 12s linear infinite}
-@keyframes christmas-snowfall{to{background-position:0 180px,0 180px,0 180px,0 180px}}
-.christmas-flight{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 120%,#183d54 0%,#081528 55%,#030914 100%);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s,visibility .3s}
-.christmas-flight.active{opacity:1;visibility:visible}
-.christmas-flight .moon{position:absolute;top:12%;right:15%;width:74px;height:74px;border-radius:50%;background:#fff2c7;box-shadow:0 0 35px 12px rgba(255,239,188,.18)}
-.christmas-flight .stars{position:absolute;inset:0;background-image:radial-gradient(2px 2px at 15% 22%,#fff 98%,transparent),radial-gradient(1px 1px at 32% 14%,#fff 98%,transparent),radial-gradient(2px 2px at 71% 28%,#fff 98%,transparent),radial-gradient(1px 1px at 83% 48%,#fff 98%,transparent),radial-gradient(1px 1px at 48% 36%,#fff 98%,transparent)}
-.christmas-flight .flight-message{position:relative;z-index:2;margin-top:-30vh;color:#fff;text-align:center;font-weight:800;font-size:clamp(17px,3vw,24px);text-shadow:0 2px 14px #000}
-.christmas-flight .sleigh{position:absolute;left:-45%;top:42%;font-size:clamp(42px,8vw,76px);white-space:nowrap;filter:drop-shadow(0 4px 12px #0008);animation:santa-flight 2.2s ease-in-out forwards}
-.christmas-flight .winter-ground{position:absolute;bottom:0;left:0;right:0;height:23%;background:linear-gradient(170deg,transparent 0 22%,#eaf4f7 23% 100%)}
-.christmas-flight .winter-scene{position:absolute;bottom:9%;left:8%;font-size:clamp(28px,5vw,48px);white-space:nowrap}
-@keyframes santa-flight{0%{transform:translateX(0) translateY(30px) rotate(-5deg)}45%{transform:translateX(85vw) translateY(-55px) rotate(2deg)}100%{transform:translateX(155vw) translateY(-20px) rotate(4deg)}}
-@media(max-width:560px){.christmas-letter-button{max-width:116px;min-height:39px;padding:6px 7px;font-size:9px;gap:4px;border-radius:11px}.christmas-letter-button .christmas-icon{font-size:15px}.christmas-snow{opacity:.34}.christmas-flight .moon{width:55px;height:55px;right:12%}}
-@media(prefers-reduced-motion:reduce){.christmas-snow,.christmas-letter-button .lights-text{animation:none!important}.christmas-flight .sleigh{animation-duration:.5s!important}}
+.christmas-cta-row{display:flex;justify-content:center;align-items:center;margin:-7px auto 21px;padding:0 14px}
+.christmas-cta-row .christmas-letter-button{width:min(290px,100%);min-height:44px}
+@media(max-width:560px){.christmas-cta-row{margin:-5px auto 18px}.christmas-cta-row .christmas-letter-button{width:min(270px,100%);font-size:11px}.christmas-initial img{width:22px;height:19px;left:-4px;top:-12px}.christmas-letter-button{max-width:116px;min-height:39px;padding:6px 7px;font-size:9px;gap:4px;border-radius:11px}.christmas-letter-button .christmas-icon{font-size:15px}}
+@media(prefers-reduced-motion:reduce){.christmas-letter-button .lights-text{animation:none!important}}
 </style>
 </head>
 <body>
 <header class="topbar">
   <button class="icon-button" id="menuOpen" aria-label="Open navigation menu"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-  <div class="brand"><h1 class="brand-name"><span class="christmas-initial">S</span>hopper’s Suggestions<span class="brand-dot">.</span></h1><p class="brand-caption">Find it · Love it · Share it</p></div>
-  <div class="top-actions"><a class="christmas-letter-button" href="/christmas.html" aria-label="send a letter to your friends"><span class="christmas-icon" aria-hidden="true">🎄</span><span class="lights-text">send a letter to your friends</span></a><button class="icon-button mail-button" id="mailOpen" aria-label="Open mail and announcements" title="Mail & announcements"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg><span class="mail-dot hidden" id="mailDot"></span></button><button class="top-text-button" id="profileOpen" type="button" aria-label="Sign up"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-4 3-6 7-6s6.4 2 7 6"/><path d="M19 4v6M16 7h6"/></svg><span>Sign up</span></button><button class="top-text-button" id="settingsOpen" type="button" aria-label="Open settings"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.1 1.9-1.8 3.1-2.2-.5a7.8 7.8 0 0 1-1.7 1l-.4 2.2h-3.6l-.4-2.2a7.8 7.8 0 0 1-1.7-1l-2.2.5-1.8-3.1 1.1-1.9A7.5 7.5 0 0 1 5.7 12a7.5 7.5 0 0 1 .3-2.1L4.9 8l1.8-3.1 2.2.5a7.8 7.8 0 0 1 1.7-1L11 2.2h3.6L15 4.4a7.8 7.8 0 0 1 1.7 1l2.2-.5L20.7 8l-1.1 1.9a7.5 7.5 0 0 1 .3 2.1 7.5 7.5 0 0 1-.5 3Z" transform="translate(0 -1) scale(.95)"/></svg><span>Settings</span></button></div>
+  <div class="brand"><h1 class="brand-name"><span class="christmas-initial"><img src="/pngwing.com.png" alt="" aria-hidden="true">S</span>hopper’s Suggestions<span class="brand-dot">.</span></h1><p class="brand-caption">Find it · Love it · Share it</p></div>
+  <div class="top-actions"><button class="icon-button mail-button" id="mailOpen" aria-label="Open mail and announcements" title="Mail & announcements"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg><span class="mail-dot hidden" id="mailDot"></span></button><button class="top-text-button" id="profileOpen" type="button" aria-label="Sign up"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-4 3-6 7-6s6.4 2 7 6"/><path d="M19 4v6M16 7h6"/></svg><span>Sign up</span></button><button class="top-text-button" id="settingsOpen" type="button" aria-label="Open settings"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.1 1.9-1.8 3.1-2.2-.5a7.8 7.8 0 0 1-1.7 1l-.4 2.2h-3.6l-.4-2.2a7.8 7.8 0 0 1-1.7-1l-2.2.5-1.8-3.1 1.1-1.9A7.5 7.5 0 0 1 5.7 12a7.5 7.5 0 0 1 .3-2.1L4.9 8l1.8-3.1 2.2.5a7.8 7.8 0 0 1 1.7-1L11 2.2h3.6L15 4.4a7.8 7.8 0 0 1 1.7 1l2.2-.5L20.7 8l-1.1 1.9a7.5 7.5 0 0 1 .3 2.1 7.5 7.5 0 0 1-.5 3Z" transform="translate(0 -1) scale(.95)"/></svg><span>Settings</span></button></div>
 </header>
 <div class="menu-overlay" id="menuOverlay" aria-hidden="true"><aside class="side-menu" aria-label="Main navigation"><div class="menu-top"><strong>Explore</strong><button class="icon-button" id="menuClose" aria-label="Close menu"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><nav class="menu-links">
   <button class="menu-link active" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Home</button>
@@ -108,7 +100,7 @@
 </nav></aside></div>
 <div class="signup-overlay" id="signupModal" aria-hidden="true"><section class="signup-dialog" role="dialog" aria-modal="true" aria-labelledby="signupTitle"><button class="icon-button signup-close" id="signupClose" type="button" aria-label="Close sign up"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button><div class="signup-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-4 3-6 7-6s6.4 2 7 6"/><path d="M19 3v6M16 6h6"/></svg></div><h2 id="signupTitle">Log in or sign up</h2><p>Continue with your Google account to save favourites and access your profile.</p><a class="google-button signup-google" href="/auth/google"><svg class="google-mark" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.01 13.22l7.98 6.19C11.88 13.72 17.44 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.73 7.18l7.64 5.93c4.46-4.11 7.13-10.16 7.13-17.58Z"/><path fill="#FBBC05" d="M9.99 28.59A14.4 14.4 0 0 1 9.2 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.52 2.58 10.78l7.41-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.87l-7.64-5.93c-2.12 1.42-4.83 2.27-8.27 2.27-6.56 0-12.12-4.22-14.01-10.09l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>Continue with Google</a></section></div>
 <main class="page">
-<section id="page-home" class="page-view"><div class="welcome"><div class="eyebrow">Your next favourite find</div><h2>Good finds. Great people.</h2><p>Discover interesting products and the promoters who recommend them.</p></div>
+<section id="page-home" class="page-view"><div class="welcome"><div class="eyebrow">Your next favourite find</div><h2>Good finds. Great people.</h2><p>Discover interesting products and the promoters who recommend them.</p></div><div class="christmas-cta-row"><a class="christmas-letter-button" href="/christmas.html" aria-label="send a letter to your friends"><span class="christmas-icon" aria-hidden="true">🎄</span><span class="lights-text">send a letter to your friends</span></a></div>
 <form class="search-wrap" id="productSearchForm"><input id="productSearch" type="search" placeholder="Search products, categories…" aria-label="Search products"><button class="primary-button" type="submit">Search</button></form>
 <div class="section-heading"><div><h2>Browse categories</h2><p>Find something that fits your interests.</p></div></div><div class="category-row" id="categoryRow"></div>
 <div class="live-filter-row"><div><strong>Live listings</strong><small>Products recently raised by their promoters</small></div><button type="button" id="liveProductsToggle" class="live-toggle" aria-pressed="false">● Show live</button></div><div class="section-heading"><div><h2>Products to discover</h2><p>Explore recommendations in one place.</p></div><button class="text-button" data-go="discover">View all</button></div><div class="product-grid" id="homeProducts"><div class="empty-state">Loading products…</div></div>
@@ -261,7 +253,50 @@ window.addEventListener("storage",function(event){if(event.key==="ss_profile_upd
  // Start the interface once. This file contains one script block and one closing HTML document.
 buildCategories();loadSettings();loadProducts();loadPromoters();checkAccountSession().then(()=>{initialiseChat();checkGoogleAdmin();if(new URLSearchParams(location.search).get("product")){const productId=new URLSearchParams(location.search).get("product");loadProducts().then(()=>openProduct(productId));}});
 
-document.addEventListener("DOMContentLoaded",function(){var link=document.querySelector(".christmas-letter-button");var scene=document.getElementById("christmasFlight");if(!link||!scene)return;link.addEventListener("click",function(event){event.preventDefault();scene.classList.add("active");scene.setAttribute("aria-hidden","false");window.setTimeout(function(){window.location.href="/christmas.html";},2200);});});
+document.addEventListener("DOMContentLoaded",function(){
+  var link=document.querySelector(".christmas-letter-button");
+  var scene=document.getElementById("christmasFlight");
+  if(link&&scene){link.addEventListener("click",function(event){event.preventDefault();scene.classList.add("active");scene.setAttribute("aria-hidden","false");window.setTimeout(function(){window.location.href="/christmas.html";},2200);});}
+  var canvas=document.getElementById("christmasSnowCanvas");
+  if(!canvas||!canvas.getContext)return;
+  var ctx=canvas.getContext("2d");
+  var flakes=[],caps=[],width=0,height=0,dpr=1,last=0;
+  var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);width=window.innerWidth;height=window.innerHeight;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);canvas.style.width=width+"px";canvas.style.height=height+"px";ctx.setTransform(dpr,0,0,dpr,0,0);}
+  function makeFlake(start){return{x:Math.random()*width,y:start?Math.random()*height:-8-Math.random()*height*.25,r:.8+Math.random()*2.1,vy:.55+Math.random()*1.05,vx:(Math.random()-.5)*.42,phase:Math.random()*Math.PI*2,sway:.35+Math.random()*.75,alpha:.32+Math.random()*.48};}
+  function init(){resize();var count=Math.min(88,Math.max(38,Math.round(width/13)));for(var i=0;i<count;i++)flakes.push(makeFlake(true));}
+  function findLanding(x,oldY,newY){
+    var els=document.querySelectorAll("button,a,[role='button'],.product-card,.product,.panel,.promoter-card,.search-wrap,.category-chip");
+    for(var i=0;i<els.length;i++){var el=els[i];if(!el.getClientRects().length)continue;var r=el.getBoundingClientRect();if(r.width<5||r.height<5||r.bottom<0||r.top>height)continue;if(x>=r.left&&x<=r.right&&oldY<=r.top+2&&newY>=r.top-1)return{el:el,rect:r};}
+    return null;
+  }
+  function frame(now){
+    if(reduced)return;
+    var dt=Math.min(2,(now-last||16)/16);last=now;ctx.clearRect(0,0,width,height);
+    for(var i=caps.length-1;i>=0;i--){if(now-caps[i].born>60000||!caps[i].el.isConnected)c aps.splice(i,1);}
+    for(var j=0;j<flakes.length;j++){
+      var f=flakes[j],oldY=f.y;
+      f.x+=f.vx*dt+Math.sin(now*.0007+f.phase)*f.sway*.22*dt;
+      f.y+=f.vy*dt;
+      var landing=findLanding(f.x,oldY,f.y);
+      if(landing){
+        var countForTarget=0;for(var c=0;c<caps.length;c++)if(caps[c].el===landing.el)countForTarget++;
+        if(countForTarget<9)c aps.push({el:landing.el,offset:f.x-landing.rect.left,w:5+Math.random()*10,born:now});
+        flakes[j]=makeFlake(false);continue;
+      }
+      if(f.y>height+8||f.x<-10||f.x>width+10){flakes[j]=makeFlake(false);continue;}
+      ctx.beginPath();ctx.fillStyle="rgba(255,255,255,"+f.alpha+")";ctx.shadowColor="rgba(255,255,255,.55)";ctx.shadowBlur=f.r*2.2;ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    }
+    for(var k=0;k<caps.length;k++){
+      var cap=caps[k],rect=cap.el.getBoundingClientRect();if(rect.bottom<0||rect.top>height)continue;
+      var x=Math.max(rect.left+2,Math.min(rect.right-cap.w-2,rect.left+cap.offset));
+      var fade=Math.min(1,(60000-(now-cap.born))/4500);
+      ctx.beginPath();ctx.fillStyle="rgba(246,251,255,"+(.82*fade)+")";ctx.shadowColor="rgba(255,255,255,.55)";ctx.shadowBlur=3;ctx.ellipse(x+cap.w/2,rect.top+1,cap.w/2,2.1,0,Math.PI,Math.PI*2);ctx.lineTo(x+cap.w,rect.top+2);ctx.lineTo(x,rect.top+2);ctx.closePath();ctx.fill();ctx.shadowBlur=0;
+    }
+    requestAnimationFrame(frame);
+  }
+  init();window.addEventListener("resize",resize,{passive:true});requestAnimationFrame(frame);
+});});
 </script>
-<div class="christmas-snow" aria-hidden="true"></div><div class="christmas-flight" id="christmasFlight" aria-hidden="true"><div class="stars"></div><div class="moon"></div><div class="flight-message">A little Christmas magic is on its way…</div><div class="sleigh">🎅🛷🦌🦌</div><div class="winter-ground"></div><div class="winter-scene">🎄 🏠 🎁 🎁</div></div></body>
+<canvas id="christmasSnowCanvas" aria-hidden="true"></canvas><div class="christmas-flight" id="christmasFlight" aria-hidden="true"><div class="stars"></div><div class="moon"></div><div class="flight-message">A little Christmas magic is on its way…</div><div class="sleigh">🎅🛷🦌🦌</div><div class="winter-ground"></div><div class="winter-scene">🎄 🏠 🎁 🎁</div></div></body>
 </html>
