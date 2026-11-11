@@ -83,7 +83,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.snow{position:f
           <div class="open-prompt" id="openPrompt">Tap the envelope to open your letter ✨</div>
         </div>
       </div>
-      <button class="create-own" id="createOwn" type="button">create one your self! ✨</button>
+      <button class="create-own" id="createOwn" type="button" hidden>create one your self! ✨</button>
     </section>
   </main>
 
@@ -205,7 +205,7 @@ function fillLetterCard(prefix,container,card){
  $(prefix+"Message").parentElement.style.background=paperColors[state.paper]||paperColors.cream;
 }
 function showPreview(){fillLetterCard("preview",$("previewEnvelope"),$("previewLetter"));$("previewEnvelope").classList.remove("opened");$("previewLetter").classList.remove("revealed");$("previewOverlay").classList.add("show")}
-function openEnvelope(envelope,card,prompt){envelope.classList.add("opened");prompt.textContent="Opening your Christmas surprise…";setTimeout(()=>{card.classList.add("revealed");prompt.textContent="A little note, just for you ❤️"},780)}
+function openEnvelope(envelope,card,prompt){envelope.classList.add("opened");prompt.textContent="Opening your Christmas surprise…";setTimeout(()=>{card.classList.add("revealed");prompt.textContent="A little note, just for you ❤️";$("createOwn").hidden=false},780)}
 $("previewBtn").addEventListener("click",showPreview);
 $("previewEnvelope").addEventListener("click",()=>openEnvelope($("previewEnvelope"),$("previewLetter"),$("previewOverlay").querySelector(".open-prompt")));
 $("previewEnvelope").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("previewEnvelope").click()}});
@@ -246,7 +246,7 @@ async function loadSharedLetter(token){
   const stickers=$("recipientEnvelope");(state.stickers||[]).forEach(st=>{const el=document.createElement("span");el.textContent=st.emoji;el.style.cssText="position:absolute;z-index:8;left:"+st.x+"%;top:"+st.y+"%;font-size:"+Math.min(st.size,64)+"px;transform:translate(-50%,-50%) rotate("+st.rotation+"deg);filter:drop-shadow(0 4px 4px #0003);pointer-events:none";stickers.appendChild(el)});
   $("recipientEnvelope").addEventListener("click",()=>{if(!$("recipientEnvelope").classList.contains("opened"))openEnvelope($("recipientEnvelope"),$("letterCard"),$("openPrompt"))});
   $("recipientEnvelope").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&!$("recipientEnvelope").classList.contains("opened")){e.preventDefault();$("recipientEnvelope").click()}});
- }catch(err){$("recipientEnvelope").hidden=true;$("createOwn").textContent="create one your self! ✨";toast(err.message)}
+ }catch(err){$("recipientEnvelope").hidden=true;$("createOwn").hidden=false;$("createOwn").textContent="create one your self! ✨";toast(err.message)}
 }
 const token=new URLSearchParams(location.search).get("letter");
 if(token)loadSharedLetter(token);else{renderStage();renderToolPanel()}
