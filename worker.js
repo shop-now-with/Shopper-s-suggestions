@@ -1690,7 +1690,7 @@ export default {
       const url = new URL(request.url), path = url.pathname;
       if (path === "/api/health") return json({ ok: true, service: "shopper-s-suggestions-web", build: "2026-10-21-megfo-marketplace-v1", database: "connected", googleOAuthConfigured: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: !!(env.RESEND_API_KEY && env.EMAIL_FROM), paymentStatus: env.PAYMENT_PROVIDER && env.PAYMENT_API_KEY ? "provider-configured-but-checkout-not-enabled" : "setup-required" });
       if (path === "/api/christmas/letters" && request.method === "POST") return handleCreateChristmasLetter(request, env);
-      const christmasLetterMatch = path.match(/^\\/api\\/christmas\\/letters\\/([a-f0-9]{48})$/);
+      const christmasLetterMatch = path.match(/^\/api\/christmas\/letters\/([a-f0-9]{48})$/);
       if (christmasLetterMatch && request.method === "GET") return handleGetChristmasLetter(request, env, christmasLetterMatch[1]);
       if (path === "/api/categories" && request.method === "GET") return handleCategories();
       if (path === "/api/admin/login" && request.method === "POST") return handleAdminLogin(request, env);
