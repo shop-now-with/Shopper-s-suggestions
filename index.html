@@ -261,7 +261,7 @@ window.addEventListener("storage",function(event){if(event.key==="ss_profile_upd
  // Start the interface once. This file contains one script block and one closing HTML document.
 buildCategories();loadSettings();loadProducts();loadPromoters();checkAccountSession().then(()=>{initialiseChat();checkGoogleAdmin();if(new URLSearchParams(location.search).get("product")){const productId=new URLSearchParams(location.search).get("product");loadProducts().then(()=>openProduct(productId));}});
 
-(function(){var link=document.querySelector(".christmas-letter-button");var scene=document.getElementById("christmasFlight");if(!link||!scene)return;link.addEventListener("click",function(event){event.preventDefault();scene.classList.add("active");scene.setAttribute("aria-hidden","false");window.setTimeout(function(){window.location.href="/christmas.html";},2200);});})();
+document.addEventListener("DOMContentLoaded",function(){var link=document.querySelector(".christmas-letter-button");var scene=document.getElementById("christmasFlight");if(!link||!scene)return;link.addEventListener("click",function(event){event.preventDefault();scene.classList.add("active");scene.setAttribute("aria-hidden","false");window.setTimeout(function(){window.location.href="/christmas.html";},2200);});});
 </script>
 <div class="christmas-snow" aria-hidden="true"></div><div class="christmas-flight" id="christmasFlight" aria-hidden="true"><div class="stars"></div><div class="moon"></div><div class="flight-message">A little Christmas magic is on its way…</div><div class="sleigh">🎅🛷🦌🦌</div><div class="winter-ground"></div><div class="winter-scene">🎄 🏠 🎁 🎁</div></div></body>
 </html>
