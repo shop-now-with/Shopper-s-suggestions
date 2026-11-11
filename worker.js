@@ -1638,9 +1638,7 @@ async function handleCreateChristmasLetter(request, env) {
     size: christmasClamp(item?.size, 22, 96, 42),
     rotation: christmasClamp(item?.rotation, -180, 180, 0)
   }));
-  let photo = "";
-  if (typeof input.photo === "string" && input.photo.length <= 240000 &&
-      /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(input.photo)) photo = input.photo;
+  if (typeof input.photo === "string" && input.photo.length) return json({ ok: false, error: "Image uploads are not supported for Christmas letters." }, 400);
   const payload = {
     to: clean(input.to, 80),
     from: clean(input.from, 80),
@@ -1653,7 +1651,6 @@ async function handleCreateChristmasLetter(request, env) {
     envelope: ["red", "green", "cream", "navy", "gold"].includes(input.envelope) ? input.envelope : "red",
     pattern: ["plain", "snow", "stripes", "holly"].includes(input.pattern) ? input.pattern : "snow",
     stickers,
-    photo
   };
   const payloadJson = JSON.stringify(payload);
   if (payloadJson.length > 340000) return json({ ok: false, error: "This design is too large. Please remove or reduce the photo." }, 413);
