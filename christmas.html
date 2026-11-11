@@ -212,7 +212,7 @@ toolPanel.addEventListener("change",e=>{
  if(e.target.id==="photoInput"&&e.target.files&&e.target.files[0])compressPhoto(e.target.files[0]);
 });
 async function compressPhoto(file){
- if(!/^image\\/(png|jpeg|webp)$/.test(file.type)){toast("Please choose a PNG, JPG or WebP image");return}
+ if(!/^image\/(png|jpeg|webp)$/.test(file.type)){toast("Please choose a PNG, JPG or WebP image");return}
  try{const bitmap=await createImageBitmap(file);const scale=Math.min(1,760/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement("canvas");canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();let data=canvas.toDataURL("image/jpeg",.68);if(data.length>210000)data=canvas.toDataURL("image/jpeg",.48);if(data.length>240000){toast("That photo is too large. Try a smaller image.");return}saveHistory();state.photo=data;renderStage();renderToolPanel();toast("Photo added to your design")}catch(err){toast("Could not load that photo")}}
 let drag=null;
 $("stage").addEventListener("pointerdown",e=>{const el=e.target.closest(".sticker");if(!el)return;const st=state.stickers.find(x=>x.id===el.dataset.id);if(!st)return;selectedSticker=st.id;drag={id:st.id};el.setPointerCapture?.(e.pointerId);renderToolPanel();renderStage()});
