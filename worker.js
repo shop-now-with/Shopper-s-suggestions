@@ -295,6 +295,16 @@ async function initializeSchema(env) {
   await executeSchema(env, BASE_SCHEMA);
   await executeSchema(env, USER_SCHEMA);
   await executeSchema(env, COMMUNITY_SCHEMA);
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS christmas_letters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL
+    )
+  `).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_christmas_letters_expiry ON christmas_letters(expires_at)").run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_api_keys (user_id INTEGER PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, key_prefix TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`).run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS promoter_upload_cooldowns (user_id INTEGER PRIMARY KEY, blocked_until TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`).run();
   const rootEmail = clean(env.ROOT_ADMIN_EMAIL || "fayasm379@gmail.com", 320).toLowerCase();
@@ -1602,11 +1612,76 @@ async function handleShareProduct(request, env, id) {
   if (!product || ((Number(product.published) !== 1 || (product.expires_at && product.expires_at <= new Date().toISOString().replace("T", " ").slice(0,19))) && !(await isAdmin(request, env)))) return json({ ok: false, error: "Product not found" }, 404);
   return json({ ok: true, url: `https://shopperssuggestions.online/?product=${encodeURIComponent(id)}` });
 }
+
+function christmasClamp(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+function christmasHex(value, fallback) {
+  const v = clean(value, 7);
+  return /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
+}
+async function handleCreateChristmasLetter(request, env) {
+  const raw = await request.text();
+  if (raw.length > 360000) return json({ ok: false, error: "This design is too large. Please use a smaller photo." }, 413);
+  let body;
+  try { body = JSON.parse(raw || "{}"); } catch { return json({ ok: false, error: "Invalid letter data." }, 400); }
+  const input = body && body.letter && typeof body.letter === "object" ? body.letter : null;
+  if (!input) return json({ ok: false, error: "Letter data is missing." }, 400);
+  const message = clean(input.message, 5000);
+  if (!message.trim()) return json({ ok: false, error: "Write your letter before exporting." }, 400);
+  const stickerInput = Array.isArray(input.stickers) ? input.stickers.slice(0, 24) : [];
+  const stickers = stickerInput.map(item => ({
+    emoji: clean(item?.emoji, 8) || "🎄",
+    x: christmasClamp(item?.x, 0, 100, 50),
+    y: christmasClamp(item?.y, 0, 100, 50),
+    size: christmasClamp(item?.size, 22, 96, 42),
+    rotation: christmasClamp(item?.rotation, -180, 180, 0)
+  }));
+  let photo = "";
+  if (typeof input.photo === "string" && input.photo.length <= 240000 &&
+      /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(input.photo)) photo = input.photo;
+  const payload = {
+    to: clean(input.to, 80),
+    from: clean(input.from, 80),
+    message,
+    font: ["caveat", "serif", "sans", "dancing", "mono"].includes(input.font) ? input.font : "caveat",
+    textColor: christmasHex(input.textColor, "#284536"),
+    fontSize: christmasClamp(input.fontSize, 14, 44, 24),
+    textAnimation: ["none", "fade", "typewriter", "float", "sparkle"].includes(input.textAnimation) ? input.textAnimation : "fade",
+    paper: ["cream", "white", "green", "red", "night"].includes(input.paper) ? input.paper : "cream",
+    envelope: ["red", "green", "cream", "navy", "gold"].includes(input.envelope) ? input.envelope : "red",
+    pattern: ["plain", "snow", "stripes", "holly"].includes(input.pattern) ? input.pattern : "snow",
+    stickers,
+    photo
+  };
+  const payloadJson = JSON.stringify(payload);
+  if (payloadJson.length > 340000) return json({ ok: false, error: "This design is too large. Please remove or reduce the photo." }, 413);
+  const tokenBytes = crypto.getRandomValues(new Uint8Array(24));
+  const token = Array.from(tokenBytes, b => b.toString(16).padStart(2, "0")).join("");
+  await env.DB.prepare("INSERT INTO christmas_letters (token, payload_json, expires_at) VALUES (?, ?, datetime('now', '+7 days'))")
+    .bind(token, payloadJson).run();
+  const shareUrl = new URL("/christmas.html?letter=" + token, request.url).toString();
+  const expiry = await env.DB.prepare("SELECT expires_at FROM christmas_letters WHERE token=?").bind(token).first();
+  return json({ ok: true, token, url: shareUrl, expiresAt: expiry?.expires_at || null }, 201);
+}
+async function handleGetChristmasLetter(request, env, token) {
+  if (!/^[a-f0-9]{48}$/.test(token)) return json({ ok: false, error: "This Christmas letter link is invalid." }, 404);
+  const row = await env.DB.prepare("SELECT payload_json, expires_at FROM christmas_letters WHERE token=? AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(token).first();
+  if (!row) {
+    await env.DB.prepare("DELETE FROM christmas_letters WHERE token=? AND expires_at<=CURRENT_TIMESTAMP").bind(token).run();
+    return json({ ok: false, error: "This Christmas letter has expired or no longer exists." }, 404);
+  }
+  let letter;
+  try { letter = JSON.parse(row.payload_json); } catch { return json({ ok: false, error: "This Christmas letter could not be opened." }, 500); }
+  return json({ ok: true, letter, expiresAt: row.expires_at });
+}
+
 async function handleCategories() { return json({ ok: true, categories: CATEGORIES }); }
 
 export default {
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil((async () => { await ensureSchema(env); await cleanupExpiredProducts(env); await env.DB.prepare("DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP").run(); })());
+    ctx.waitUntil((async () => { await ensureSchema(env); await cleanupExpiredProducts(env); await env.DB.prepare("DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP").run(); await env.DB.prepare("DELETE FROM christmas_letters WHERE expires_at <= CURRENT_TIMESTAMP").run(); })());
   },
   async fetch(request, env) {
     try {
@@ -1614,6 +1689,9 @@ export default {
       await ensureSchema(env);
       const url = new URL(request.url), path = url.pathname;
       if (path === "/api/health") return json({ ok: true, service: "shopper-s-suggestions-web", build: "2026-10-21-megfo-marketplace-v1", database: "connected", googleOAuthConfigured: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: !!(env.RESEND_API_KEY && env.EMAIL_FROM), paymentStatus: env.PAYMENT_PROVIDER && env.PAYMENT_API_KEY ? "provider-configured-but-checkout-not-enabled" : "setup-required" });
+      if (path === "/api/christmas/letters" && request.method === "POST") return handleCreateChristmasLetter(request, env);
+      const christmasLetterMatch = path.match(/^\\/api\\/christmas\\/letters\\/([a-f0-9]{48})$/);
+      if (christmasLetterMatch && request.method === "GET") return handleGetChristmasLetter(request, env, christmasLetterMatch[1]);
       if (path === "/api/categories" && request.method === "GET") return handleCategories();
       if (path === "/api/admin/login" && request.method === "POST") return handleAdminLogin(request, env);
       if (path === "/api/admin/logout" && request.method === "POST") return handleAdminLogout(request, env);
@@ -1691,7 +1769,7 @@ export default {
 
       // Serve the latest website pages committed to GitHub while preserving the
       // existing ASSETS bundle for every other static file.
-      if (request.method === "GET" && ["/", "/index.html", "/profile.html", "/upload.html"].includes(path)) {
+      if (request.method === "GET" && ["/", "/index.html", "/profile.html", "/upload.html", "/christmas.html"].includes(path)) {
         const filePath = path === "/" ? "index.html" : path.slice(1);
         try {
           const page = await fetch(githubRawUrl(env, filePath), { cf: { cacheTtl: 60, cacheEverything: true } });
