@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#102b24">
-<title>Christmas Letter Studio · Shopper's Suggestions</title>
+<title>Envelope</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=DM+Sans:wght@400;500;600;700;800&family=Dancing+Script:wght@500;600;700&display=swap" rel="stylesheet">
@@ -32,39 +32,28 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.snow{position:f
 <body>
 <div class="snow" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 <div class="site">
-  <header class="topbar">
-    <div class="brand"><div class="brand-mark">🎄</div><div>SHOPPER'S SUGGESTIONS<small>CHRISTMAS LETTER STUDIO</small></div></div>
-    <div class="top-actions"><a class="ghost-link" href="/">← Back to home</a><button class="top-btn" id="topHelp" type="button">How it works</button></div>
-  </header>
-
   <main id="editorView">
-    <section class="hero"><div class="eyebrow">A little Christmas magic</div><h1>Send a little wonder.</h1><p>Design a personal Christmas envelope, add your message, then share it with a private link or QR code.</p></section>
     <section class="studio">
       <aside class="panel left-panel">
-        <div class="panel-head"><b>Your creative tools</b><small>Make this envelope yours</small></div>
         <div class="tool-list">
           <button class="tool-btn active" data-tool="stickers"><span>🎁</span>Stickers</button>
           <button class="tool-btn" data-tool="text"><span>✍️</span>Letter text</button>
           <button class="tool-btn" data-tool="background"><span>🎨</span>Backgrounds</button>
           <button class="tool-btn" data-tool="envelope"><span>✉️</span>Edit envelope</button>
-          <button class="tool-btn" data-tool="photo"><span>📷</span>Add a photo</button>
         </div>
-        <div class="left-note">Tip: Tap a sticker to add it. Drag stickers around the canvas. Your finished design is saved for seven days after export.</div>
       </aside>
 
       <section class="canvas-card">
         <div class="canvas-toolbar">
-          <div><strong>YOUR CHRISTMAS CANVAS</strong><small>Live preview · Mobile & desktop</small></div>
+          <div></div>
           <div class="toolbar-actions"><button class="mini-btn" id="undoBtn" type="button">↶ Undo</button><button class="mini-btn" id="previewBtn" type="button">Preview</button><button class="mini-btn primary" id="exportBtn" type="button">Export ↗</button></div>
         </div>
         <div class="stage-wrap">
           <div class="stage" id="stage">
-            <div class="stage-label">✦ Your envelope ✦</div>
             <div class="envelope" id="editorEnvelope">
               <div class="env-pocket"></div><div class="env-flap"></div><div class="env-pattern" id="editorPattern"></div>
               <div class="env-from" id="envFrom">FROM: YOU</div><div class="env-seal">✦</div><div class="env-address" id="envTo">To someone special</div>
             </div>
-            <img class="photo-layer" id="photoLayer" alt="" hidden>
             <div class="sticker-layer" id="stickerLayer"></div>
             <div class="stage-hint">Select & drag decorations</div>
           </div>
@@ -80,13 +69,9 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.snow{position:f
 
   <main id="recipientView" hidden>
     <section class="recipient">
-      <div class="eyebrow">A Christmas surprise, just for you</div>
-      <h1 id="recipientHeading">You've got a letter!</h1>
-      <p id="recipientSub">Someone sent a little Christmas magic your way.</p>
       <div class="recipient-stage">
         <div class="letter-card" id="letterCard">
           <div class="letter-to" id="letterTo"></div>
-          <img class="letter-photo" id="letterPhoto" alt="" hidden>
           <p class="letter-message" id="letterMessage"></p>
           <div class="letter-from" id="letterFrom"></div>
         </div>
@@ -99,18 +84,17 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.snow{position:f
         </div>
       </div>
       <button class="create-own" id="createOwn" type="button">create one your self! ✨</button>
-      <p id="expiryText" class="subtle" style="margin-top:16px"></p>
     </section>
   </main>
 
-  <footer class="footer"><a href="/">earn money with us! Join shopperssuggestions!</a></footer>
+  <footer class="footer"><a href="/">earn with us · join shopperssuggestions !</a></footer>
 </div>
 
 <div class="overlay" id="loadingOverlay"><div class="loading-card"><div class="loader"></div><b>Wrapping up your Christmas surprise…</b><p>Saving your design and preparing your private sharing link.</p><div class="progress"><i></i></div></div></div>
 <div class="overlay" id="exportOverlay">
   <div class="modal">
     <button class="close-modal" data-close="exportOverlay" aria-label="Close">×</button>
-    <h2>Your letter is ready!</h2><p>Choose how you want to share this envelope. The same private link works in both options.</p>
+    <h2>Export</h2>
     <div class="modal-actions"><button class="modal-btn primary" id="showQr" type="button">▦ Generate QR code</button><button class="modal-btn" id="showLink" type="button">↗ Generate link</button></div>
     <div class="result-panel" id="qrPanel"><b>Scan to open your letter</b><div class="qr-holder" id="qrHolder"></div><p class="subtle">Anyone with this QR code can open the letter until it expires.</p></div>
     <div class="result-panel" id="linkPanel"><b>Your shareable link</b><div class="link-field" style="margin-top:10px"><input id="shareLink" readonly aria-label="Share link"><button class="copy-btn" id="copyLink" type="button">Copy</button></div></div>
@@ -120,9 +104,9 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.snow{position:f
 <div class="overlay" id="previewOverlay">
   <div class="modal">
     <button class="close-modal" data-close="previewOverlay" aria-label="Close">×</button>
-    <h2>Preview your envelope</h2><p>Tap the envelope to see how your friend will open it.</p>
+    <h2>Preview</h2>
     <div class="recipient-stage" style="min-height:340px;margin:12px 0">
-      <div class="letter-card" id="previewLetter"><div class="letter-to" id="previewTo"></div><img class="letter-photo" id="previewPhoto" alt="" hidden><p class="letter-message" id="previewMessage"></p><div class="letter-from" id="previewFrom"></div></div>
+      <div class="letter-card" id="previewLetter"><div class="letter-to" id="previewTo"></div><p class="letter-message" id="previewMessage"></p><div class="letter-from" id="previewFrom"></div></div>
       <div class="recipient-envelope" id="previewEnvelope" role="button" tabindex="0">
         <div class="envelope" id="previewEnvelopeSkin"><div class="env-pocket"></div><div class="env-flap"></div><div class="env-pattern" id="previewPattern"></div><div class="env-from" id="previewEnvFrom"></div><div class="env-seal">✦</div><div class="env-address" id="previewEnvTo"></div></div>
         <div class="open-prompt">Tap to open</div>
@@ -142,7 +126,7 @@ const stickerChoices=["🎅","🎄","⛄","🦌","🎁","🔔","❄️","⭐","�
 const envelopeColors={red:"#b9363e",green:"#26714d",cream:"#d9c59b",navy:"#263b59",gold:"#bd9144"};
 const paperColors={cream:"#fff8e9",white:"#ffffff",green:"#eef5e9",red:"#fff0ed",night:"#e9edf9"};
 const fontNames={caveat:"Caveat",serif:"serif",sans:"DM Sans",dancing:"Dancing Script",mono:"monospace"};
-let state={to:"",from:"",message:"",font:"caveat",textColor:"#284536",fontSize:24,textAnimation:"fade",paper:"cream",envelope:"red",pattern:"snow",stickers:[],photo:""};
+let state={to:"",from:"",message:"",font:"caveat",textColor:"#284536",fontSize:24,textAnimation:"fade",paper:"cream",envelope:"red",pattern:"snow",stickers:[]};
 let activeTool="stickers",selectedSticker=null,history=[],shareUrl="",expiresAt="";
 const editorView=$("editorView"),recipientView=$("recipientView"),toolPanel=$("toolPanel");
 function toast(message){const t=$("toast");t.textContent=message;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2300)}
@@ -153,7 +137,6 @@ function renderStage(){
  const env=$("editorEnvelope");env.style.setProperty("--env",envelopeColors[state.envelope]||envelopeColors.red);env.style.setProperty("--env-dark",shade(envelopeColors[state.envelope]||envelopeColors.red));
  $("envTo").textContent=state.to?"To: "+state.to:"To someone special";$("envFrom").textContent=state.from?"FROM: "+state.from.toUpperCase():"FROM: YOU";
  $("editorPattern").className="env-pattern pattern-"+state.pattern;
- $("photoLayer").hidden=!state.photo;if(state.photo)$("photoLayer").src=state.photo;
  const layer=$("stickerLayer");layer.innerHTML="";
  state.stickers.forEach(st=>{
   const el=document.createElement("div");el.className="sticker"+(st.id===selectedSticker?" selected":"");el.textContent=st.emoji;el.dataset.id=st.id;
@@ -187,9 +170,6 @@ function renderToolPanel(){
   title.textContent="Edit envelope";sub.textContent="Choose the envelope style";
   content='<div class="field"><label>Envelope colour</label><div class="color-row">'+Object.keys(envelopeColors).map(k=>'<button type="button" class="swatch '+(state.envelope===k?'active':'')+'" data-envelope="'+k+'" title="'+k+'" style="background:'+envelopeColors[k]+'"></button>').join("")+'</div></div><div class="field"><label>Envelope pattern</label><select id="patternSelect"><option value="snow">Snowflakes</option><option value="stripes">Festive stripes</option><option value="holly">Holly leaves</option><option value="plain">Plain</option></select></div><div class="subtle">The envelope opens with a flap and wax-seal animation when your friend visits the shared link.</div>';
   setTimeout(()=>{const p=$("patternSelect");if(p)p.value=state.pattern},0);
- }else if(activeTool==="photo"){
-  title.textContent="Add a photo";sub.textContent="Include a favourite memory";
-  content='<div class="field"><label>Choose a photo</label><input id="photoInput" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="subtle">Your photo is resized and compressed in your browser before it is saved with the letter. One photo per letter.</div>'+(state.photo?'<button class="mini-btn" type="button" id="removePhoto">Remove photo</button>':'');
  }
  toolPanel.innerHTML=content;
 }
@@ -201,7 +181,6 @@ toolPanel.addEventListener("click",e=>{
  const env=e.target.closest("[data-envelope]");if(env){saveHistory();state.envelope=env.dataset.envelope;renderStage();renderToolPanel();return}
  if(e.target.id==="rotateSticker"){const st=state.stickers.find(x=>x.id===selectedSticker);if(st){saveHistory();st.rotation=(st.rotation+15)%360;renderStage();renderToolPanel()}}
  if(e.target.id==="removeSticker"){saveHistory();state.stickers=state.stickers.filter(x=>x.id!==selectedSticker);selectedSticker=null;renderStage();renderToolPanel()}
- if(e.target.id==="removePhoto"){saveHistory();state.photo="";renderStage();renderToolPanel()}
 });
 toolPanel.addEventListener("input",e=>{
  const el=e.target,field=el.dataset.field;if(field){if(field==="fontSize")state.fontSize=Number(el.value);else state[field]=el.value;if(field==="to"||field==="from"||field==="message")renderStage();const out=el.parentElement.querySelector("output");if(out)out.textContent=field==="fontSize"?el.value+"px":el.value}
@@ -209,11 +188,7 @@ toolPanel.addEventListener("input",e=>{
 });
 toolPanel.addEventListener("change",e=>{
  if(e.target.id==="patternSelect"){saveHistory();state.pattern=e.target.value;renderStage()}
- if(e.target.id==="photoInput"&&e.target.files&&e.target.files[0])compressPhoto(e.target.files[0]);
 });
-async function compressPhoto(file){
- if(!/^image\/(png|jpeg|webp)$/.test(file.type)){toast("Please choose a PNG, JPG or WebP image");return}
- try{const bitmap=await createImageBitmap(file);const scale=Math.min(1,760/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement("canvas");canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();let data=canvas.toDataURL("image/jpeg",.68);if(data.length>210000)data=canvas.toDataURL("image/jpeg",.48);if(data.length>240000){toast("That photo is too large. Try a smaller image.");return}saveHistory();state.photo=data;renderStage();renderToolPanel();toast("Photo added to your design")}catch(err){toast("Could not load that photo")}}
 let drag=null;
 $("stage").addEventListener("pointerdown",e=>{const el=e.target.closest(".sticker");if(!el)return;const st=state.stickers.find(x=>x.id===el.dataset.id);if(!st)return;selectedSticker=st.id;drag={id:st.id};el.setPointerCapture?.(e.pointerId);renderToolPanel();renderStage()});
 window.addEventListener("pointermove",e=>{if(!drag)return;const rect=$("stage").getBoundingClientRect();const st=state.stickers.find(x=>x.id===drag.id);if(!st)return;st.x=Math.max(0,Math.min(100,(e.clientX-rect.left)/rect.width*100));st.y=Math.max(0,Math.min(100,(e.clientY-rect.top)/rect.height*100));renderStage()});
@@ -228,7 +203,6 @@ function fillLetterCard(prefix,container,card){
  $(prefix+"Message").className="letter-message font-"+state.font+" anim-"+state.textAnimation;
  $(prefix+"Message").style.color=state.textColor;$(prefix+"Message").style.fontSize=state.fontSize+"px";
  $(prefix+"Message").parentElement.style.background=paperColors[state.paper]||paperColors.cream;
- const photo=$(prefix+"Photo");photo.hidden=!state.photo;if(state.photo)photo.src=state.photo;
 }
 function showPreview(){fillLetterCard("preview",$("previewEnvelope"),$("previewLetter"));$("previewEnvelope").classList.remove("opened");$("previewLetter").classList.remove("revealed");$("previewOverlay").classList.add("show")}
 function openEnvelope(envelope,card,prompt){envelope.classList.add("opened");prompt.textContent="Opening your Christmas surprise…";setTimeout(()=>{card.classList.add("revealed");prompt.textContent="A little note, just for you ❤️"},780)}
@@ -257,7 +231,6 @@ $("showQr").addEventListener("click",()=>{
 $("copyLink").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(shareUrl);toast("Share link copied!")}catch(e){$("shareLink").select();document.execCommand("copy");toast("Share link copied!")}});
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>$(b.dataset.close).classList.remove("show")));
 ["exportOverlay","previewOverlay"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target.id===id)$(id).classList.remove("show")}));
-$("topHelp").addEventListener("click",()=>toast("Design your envelope, write a note, then export a private link or QR code."));
 $("createOwn").addEventListener("click",()=>{location.href="/christmas.html"});
 async function loadSharedLetter(token){
  editorView.hidden=true;recipientView.hidden=false;
@@ -270,12 +243,10 @@ async function loadSharedLetter(token){
   $("letterTo").textContent=state.to?"For "+state.to:"A little Christmas note";$("letterFrom").textContent=state.from?"— "+state.from:"— With love";
   $("letterMessage").textContent=state.message;$("letterMessage").className="letter-message font-"+state.font+" anim-"+state.textAnimation;$("letterMessage").style.color=state.textColor;$("letterMessage").style.fontSize=state.fontSize+"px";
   $("letterCard").style.background=paperColors[state.paper]||paperColors.cream;
-  $("letterPhoto").hidden=!state.photo;if(state.photo)$("letterPhoto").src=state.photo;
   const stickers=$("recipientEnvelope");(state.stickers||[]).forEach(st=>{const el=document.createElement("span");el.textContent=st.emoji;el.style.cssText="position:absolute;z-index:8;left:"+st.x+"%;top:"+st.y+"%;font-size:"+Math.min(st.size,64)+"px;transform:translate(-50%,-50%) rotate("+st.rotation+"deg);filter:drop-shadow(0 4px 4px #0003);pointer-events:none";stickers.appendChild(el)});
-  $("expiryText").textContent="This letter is available for a limited time and expires seven days after it was created.";
   $("recipientEnvelope").addEventListener("click",()=>{if(!$("recipientEnvelope").classList.contains("opened"))openEnvelope($("recipientEnvelope"),$("letterCard"),$("openPrompt"))});
   $("recipientEnvelope").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&!$("recipientEnvelope").classList.contains("opened")){e.preventDefault();$("recipientEnvelope").click()}});
- }catch(err){$("recipientHeading").textContent="This letter has gone away";$("recipientSub").textContent=err.message;$("recipientEnvelope").hidden=true;$("createOwn").textContent="create one your self! ✨"}
+ }catch(err){$("recipientEnvelope").hidden=true;$("createOwn").textContent="create one your self! ✨";toast(err.message)}
 }
 const token=new URLSearchParams(location.search).get("letter");
 if(token)loadSharedLetter(token);else{renderStage();renderToolPanel()}
