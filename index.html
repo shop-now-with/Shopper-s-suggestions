@@ -273,7 +273,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function frame(now){
     if(reduced)return;
     var dt=Math.min(2,(now-last||16)/16);last=now;ctx.clearRect(0,0,width,height);
-    for(var i=caps.length-1;i>=0;i--){if(now-caps[i].born>60000||!caps[i].el.isConnected)c aps.splice(i,1);}
+    for(var i=caps.length-1;i>=0;i--){if(now-caps[i].born>60000||!caps[i].el.isConnected)caps.splice(i,1);}
     for(var j=0;j<flakes.length;j++){
       var f=flakes[j],oldY=f.y;
       f.x+=f.vx*dt+Math.sin(now*.0007+f.phase)*f.sway*.22*dt;
@@ -281,7 +281,7 @@ document.addEventListener("DOMContentLoaded",function(){
       var landing=findLanding(f.x,oldY,f.y);
       if(landing){
         var countForTarget=0;for(var c=0;c<caps.length;c++)if(caps[c].el===landing.el)countForTarget++;
-        if(countForTarget<9)c aps.push({el:landing.el,offset:f.x-landing.rect.left,w:5+Math.random()*10,born:now});
+        if(countForTarget<9)caps.push({el:landing.el,offset:f.x-landing.rect.left,w:5+Math.random()*10,born:now});
         flakes[j]=makeFlake(false);continue;
       }
       if(f.y>height+8||f.x<-10||f.x>width+10){flakes[j]=makeFlake(false);continue;}
