@@ -635,9 +635,13 @@ async function cleanupExpiredProducts(env) {
   // Stage 1: after 72 hours, hide the listing from Home but keep it in the
   // owner's uploaded list for a further 48 hours so it can still be bumped.
   const newlyExpired = await env.DB.prepare(
-    "SELECT id FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP LIMIT 200"
+    "SELECT id,uploader_id FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP LIMIT 200"
   ).all();
   for (const product of newlyExpired.results || []) {
+    if (product.uploader_id != null) {
+      try { await applyPromoterExpiryCooldown(env, Number(product.uploader_id)); }
+      catch (error) { console.error("Promoter expiry cooldown failed:", product.id, error); }
+    }
     await env.DB.prepare(
       "UPDATE products SET published=0, expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP), updated_at=CURRENT_TIMESTAMP WHERE id=?"
     ).bind(product.id).run();
@@ -782,6 +786,22 @@ async function applyPromoterRemovalCooldown(env, userId, product) {
     ON CONFLICT(user_id) DO UPDATE SET blocked_until=excluded.blocked_until, updated_at=CURRENT_TIMESTAMP`).bind(userId).run();
 }
 
+async function applyPromoterExpiryCooldown(env, userId) {
+  if (!userId || !(await approvedPromoter(env, userId))) return;
+  // The expiring row is still published at this point. Apply the 3-day block
+  // only when exactly one listing is expiring and exactly three remain live,
+  // which means the promoter is moving from four live listings to three.
+  const counts = await env.DB.prepare(
+    "SELECT SUM(CASE WHEN expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS active_count, SUM(CASE WHEN expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS expired_count FROM products WHERE uploader_id=? AND published=1"
+  ).bind(userId).first();
+  if (Number(counts?.active_count || 0) !== 3 || Number(counts?.expired_count || 0) !== 1) return;
+  await env.DB.prepare(`INSERT INTO promoter_upload_cooldowns (user_id, blocked_until, updated_at)
+    VALUES (?, datetime('now','+3 days'), CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id) DO UPDATE SET
+      blocked_until=MAX(promoter_upload_cooldowns.blocked_until, excluded.blocked_until),
+      updated_at=CURRENT_TIMESTAMP`).bind(userId).run();
+}
+
 async function handleMyApiKey(request, env) {
   const user = await currentUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
@@ -820,6 +840,7 @@ async function handleIntegrationProduct(request, env) {
     return json({ ok: true, account_id: Number(owner.id), is_admin: !!adminRow, products: (rows.results || []).map(productPublic) });
   }
   if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  await cleanupExpiredProducts(env);
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON body" }, 400); }
   const title = clean(body.title, 300);
@@ -933,6 +954,7 @@ async function handleCreateProduct(request, env) {
   const user = await currentUser(request, env);
   const promoter = user ? await approvedPromoter(env,user.id) : null;
   if (!admin && !promoter) return json({ok:false,error:"Only approved promoters or administrators can publish listings"},403);
+  await cleanupExpiredProducts(env);
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
   const title = clean(body.title, 300);
@@ -1047,6 +1069,13 @@ async function handleUploadMedia(request, env) {
   const user = await currentUser(request,env);
   const promoter = user ? await approvedPromoter(env,user.id) : null;
   if (!admin && !promoter) return json({ok:false,error:"Become a promoter before uploading product media"},403);
+  if (!admin) {
+    await cleanupExpiredProducts(env);
+    const blockedUntil = await getPromoterUploadCooldown(env, user.id);
+    if (blockedUntil) return promoterCooldownResponse(blockedUntil);
+    const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(user.id).first();
+    if (Number(active?.count || 0) >= 4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
+  }
   if (!(request.headers.get("Content-Type") || "").startsWith("multipart/form-data")) return json({ ok: false, error: "Expected multipart/form-data" }, 400);
   const form = await request.formData();
   const file = form.get("file") || form.get("image") || form.get("media");
