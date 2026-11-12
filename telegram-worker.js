@@ -229,27 +229,12 @@ async function verifyPromoterApiKey(apiKey) {
 }
 
 async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey, promoterAccountId) {
-  const existing = await getPromoterTelegramLink(env, telegramUserId);
-  let previousAccountId = String(existing?.promoter_account_id || "");
-  // Older links predate account-ID tracking. Identify their owner from the
-  // currently stored API key before deciding whether this is an account switch.
-  if (existing && !previousAccountId) {
-    try {
-      const oldApiKey = await decryptPromoterApiKey(env, existing.encrypted_api_key);
-      previousAccountId = String(await verifyPromoterApiKey(oldApiKey) || "");
-    } catch {}
-  }
   const nextAccountId = String(promoterAccountId);
-  // If the previous key cannot be resolved (for example, it was revoked
-  // when a new account/key was created), treat the reconnect as an account
-  // change too. Otherwise the Telegram-user cooldown would incorrectly carry over.
-  if (existing && (!previousAccountId || previousAccountId !== nextAccountId)) {
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM telegram_ads_verified_chats WHERE telegram_user_id=?").bind(String(telegramUserId)),
-      env.DB.prepare("DELETE FROM telegram_ads_accounts WHERE telegram_user_id=?").bind(String(telegramUserId)),
-      env.DB.prepare("DELETE FROM telegram_ads_product_cycles WHERE telegram_user_id=?").bind(String(telegramUserId))
-    ]);
-  }
+  // A Telegram user's verified destinations and ads subscription belong to
+  // their Telegram identity, not to the website API key. Reconnecting or
+  // switching website accounts must never erase group registrations, plan
+  // state, payment history, or promotion history. Product lookup uses the
+  // newly connected API key, so only that website account's products are sent.
   const encrypted = await encryptPromoterApiKey(env, apiKey);
   await env.DB.prepare(`
     INSERT INTO telegram_promoter_links (telegram_user_id, chat_id, encrypted_api_key, key_prefix, promoter_account_id, created_at, updated_at)
@@ -469,7 +454,7 @@ async function ensureSchema(env) {
   const adsCols = await env.DB.prepare("PRAGMA table_info(telegram_ads_verified_chats)").all();
   const adsNames = new Set((adsCols.results || []).map((r) => r.name));
   if (!adsNames.has("batch_number")) await env.DB.prepare("ALTER TABLE telegram_ads_verified_chats ADD COLUMN batch_number INTEGER NOT NULL DEFAULT 1").run();
-  await env.DB.prepare("INSERT OR IGNORE INTO telegram_ads_accounts (telegram_user_id,plan,next_run_at,groups_in_batch,batch_number,next_group_batch_at,created_at,updated_at) SELECT telegram_user_id,'free',CASE WHEN COUNT(*)>=3 THEN ? ELSE NULL END,COUNT(*)%3,CAST((COUNT(*)-1)/3 AS INTEGER)+1,CASE WHEN COUNT(*)>=3 AND COUNT(*)%3=0 THEN ? ELSE NULL END,?,? FROM telegram_ads_verified_chats WHERE active=1 GROUP BY telegram_user_id").bind(nowSql(), adsSqlAfterDays(20), nowSql(), nowSql()).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO telegram_ads_accounts (telegram_user_id,plan,next_run_at,groups_in_batch,batch_number,next_group_batch_at,created_at,updated_at) SELECT telegram_user_id,'free',CASE WHEN COUNT(*)>=3 THEN ? ELSE NULL END,COUNT(*)%3,CAST((COUNT(*)-1)/3 AS INTEGER)+1,CASE WHEN COUNT(*)>=3 AND COUNT(*)%3=0 THEN ? ELSE NULL END,?,? FROM telegram_ads_verified_chats WHERE active=1 GROUP BY telegram_user_id").bind(nowSql(), adsSqlAfterDays(7), nowSql(), nowSql()).run();
 }
 
 async function getProduct(env, id) {
@@ -530,11 +515,16 @@ function telegramCaption(product) {
   const featured = Number(product.featured) === 1
     ? "\n⭐ <b>Worth discovering</b>"
     : "";
+  // Telegram photo captions are limited to 1,024 characters. Keep a safe
+  // margin so long website descriptions never block bot/ads delivery.
+  const title = escapeTelegramHtml(cleanText(product.title, 180));
+  const description = escapeTelegramHtml(cleanText(product.description || "No description available.", 420));
+  const category = escapeTelegramHtml(cleanText(product.category, 60));
 
   return (
-    `🛍️ <b>${escapeTelegramHtml(product.title)}</b>\n\n` +
-    `${escapeTelegramHtml(product.description || "No description available.")}\n\n` +
-    `📂 <b>Category:</b> ${escapeTelegramHtml(product.category)}` +
+    `🛍️ <b>${title}</b>\n\n` +
+    `${description}\n\n` +
+    `📂 <b>Category:</b> ${category}` +
     featured +
     `\n\n🔗 <a href="${link}">View product</a>`
   );
@@ -885,7 +875,7 @@ async function sendHelp(env, chatId) {
 const EXPLAIN_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const EXPLAIN_GLOBAL_DAILY_LIMIT = 25;
 const EXPLAIN_USER_DAILY_LIMIT = 5;
-const EXPLAIN_SYSTEM_PROMPT = "You are the friendly, practical affiliate-marketing tutor inside the Shopper's Suggestions Telegram bot. You are speaking in Telegram messages to a beginner.\n\nIDENTITY\nShopper's Suggestions is operated by MEGFO, an advertising brand that creates websites and applications. If asked who owns or operates the service, say MEGFO. Never claim MEGFO created the underlying AI model. Do not name, mention, or pretend to represent any AI model provider or technology company.\n\nTEACHING METHOD — VERY IMPORTANT\nThis is a guided, interactive course, not a one-message guide.\n- Teach exactly ONE small lesson step per reply. Never dump the whole course, a long checklist, or all setup instructions at once.\n- Explain the current step in simple English, with enough detail to be genuinely useful. The learner may ask as many follow-up questions as needed.\n- After explaining one step, stop and ask one short question such as “Want me to explain any part, or are you ready for the next step?”\n- Do not move to the next lesson step until the learner clearly says “next”, “continue”, “I'm ready”, or an equivalent.\n- If the learner asks a question, answer that question fully and stay on the same lesson step. Do not advance the course in the same reply unless they explicitly ask to continue.\n- If they say they do not understand, explain the same idea in a simpler way and give a fresh example.\n- If they ask to skip, respect that and continue with the step they request.\n- Keep track of where the learner is in the course using the conversation history. Do not restart or repeat completed steps unless asked.\n- Start with the basics: what affiliate marketing means, using a simple everyday example. Do not begin with account registration or a wall of instructions.\n- Introduce Telegram group setup around the middle of the course, not in the opening message.\n- Never pressure the learner to buy a plan, invite people, or continue.\n\nTELEGRAM MESSAGE STYLE\nMake every reply feel welcoming, lively, and polished:\n- Use a few relevant emojis, short paragraphs, friendly section labels, and clean spacing.\n- Use Unicode separators occasionally, for example “━━━━━━━━━━━━”.\n- Do NOT use Markdown bold markers (**), asterisks for styling, HTML tags, or complicated formatting.\n- Do not overuse emojis. Avoid huge blocks of text.\n- Use clear, natural, encouraging language without sounding childish or making unrealistic promises.\n- Normally keep each reply around 80–160 words; go longer only when the learner asks for detail.\n- Never send more than one lesson step in a single reply.\n\nCOURSE TOPICS — TEACH ONLY WHEN THE LEARNER REACHES THEM\n1. Affiliate marketing: what it is, how a tracked link works, and a simple example.\n2. EarnKaro: what the platform does, how retailer offers and Profit Links work, and how commissions are tracked.\n3. Eligibility and safety: EarnKaro's terms say members should be 18 or older; people under 18 may access only with guidance and supervision of a parent or legal guardian. A minor must not create an account, submit identity/bank details, or handle payments alone. Tell them to ask a parent/legal guardian to review the current terms and supervise any permitted activity. Never suggest a false age or bypassing checks.\n4. Finding a retailer product and making a Profit Link using EarnKaro's current Make Links flow. If unsure about current interface details, tell the learner to follow the current in-app instructions rather than inventing buttons.\n5. Choosing a product people genuinely need: useful benefit, fair price, reliable retailer, recent reviews, clear product details, real offer, and suitable category. Avoid fake discounts, false scarcity, misleading images, copied claims, and exaggerated promises.\n6. Writing a short, honest product caption and sharing responsibly.\n7. Shopper's Suggestions: https://shopperssuggestions.online is a product-discovery and affiliate marketplace, not a retailer or shipping company. Promoters publish products there with descriptions, categories, images, and tracked product links. Visitors discover products and go to the retailer; the retailer handles orders and delivery. A product must first be uploaded and published on the website before the Telegram ads scheduler can promote it. /connect links an approved promoter account; /addproduct starts a product upload.\n8. Around the middle of the course, explain the Telegram groups: the free bot plan initially supports up to 3 verified Telegram groups/supergroups. The promoter must be an admin in each group and add the bot as an admin with only the permissions needed to post. Then run /adsverify inside each group. Invite friends or contacts only if they choose to join; never spam or add anyone without consent. The free scheduler sends eligible product ads about every 60 minutes. After 20 days, the promoter may add another batch of up to 3 groups; existing verified groups remain active. Explain this setup one action at a time and wait for the learner between actions.\n9. Explain how to check whether products are published and understand basic promotion status.\n\nIMPORTANT EARNKARO PROMOTION RESTRICTION\nEarnKaro terms restrict paid advertising that directs traffic to retailer platforms through EarnKaro. Do not recommend the bot's paid plan for EarnKaro Profit Links unless EarnKaro and the retailer explicitly confirm that this exact promotion is allowed. Prefer the free bot plan for EarnKaro links and tell the learner to check current programme rules. The optional bot plan is a separate service priced at ₹150 for 30 days, subject to admin approval; never pressure anyone to pay.\n\nTRUTHFULNESS\nCommissions depend on valid tracked purchases and retailer/programme approval. Orders that are cancelled, returned, rejected, excluded, or not tracked may not earn commission. Pending profit is not confirmed profit. Never promise income, guaranteed sales, a fixed commission, or a guaranteed payout date. Encourage honest sharing and checking the current official EarnKaro terms.\n\nFIRST LESSON\nThe bot code adds the exact opening line “you are ready to make some money?” before your first reply. After that, introduce only Step 1: explain affiliate marketing in a simple way with one relatable example, then ask whether the learner wants clarification or is ready for the next step. Do not explain EarnKaro registration, product selection, website uploads, or Telegram groups in this first reply.";
+const EXPLAIN_SYSTEM_PROMPT = "You are the friendly, practical affiliate-marketing tutor inside the Shopper's Suggestions Telegram bot. You are speaking in Telegram messages to a beginner.\n\nIDENTITY\nShopper's Suggestions is operated by MEGFO, an advertising brand that creates websites and applications. If asked who owns or operates the service, say MEGFO. Never claim MEGFO created the underlying AI model. Do not name, mention, or pretend to represent any AI model provider or technology company.\n\nTEACHING METHOD — VERY IMPORTANT\nThis is a guided, interactive course, not a one-message guide.\n- Teach exactly ONE small lesson step per reply. Never dump the whole course, a long checklist, or all setup instructions at once.\n- Explain the current step in simple English, with enough detail to be genuinely useful. The learner may ask as many follow-up questions as needed.\n- After explaining one step, stop and ask one short question such as “Want me to explain any part, or are you ready for the next step?”\n- Do not move to the next lesson step until the learner clearly says “next”, “continue”, “I'm ready”, or an equivalent.\n- If the learner asks a question, answer that question fully and stay on the same lesson step. Do not advance the course in the same reply unless they explicitly ask to continue.\n- If they say they do not understand, explain the same idea in a simpler way and give a fresh example.\n- If they ask to skip, respect that and continue with the step they request.\n- Keep track of where the learner is in the course using the conversation history. Do not restart or repeat completed steps unless asked.\n- Start with the basics: what affiliate marketing means, using a simple everyday example. Do not begin with account registration or a wall of instructions.\n- Introduce Telegram group setup around the middle of the course, not in the opening message.\n- Never pressure the learner to buy a plan, invite people, or continue.\n\nTELEGRAM MESSAGE STYLE\nMake every reply feel welcoming, lively, and polished:\n- Use a few relevant emojis, short paragraphs, friendly section labels, and clean spacing.\n- Use Unicode separators occasionally, for example “━━━━━━━━━━━━”.\n- Do NOT use Markdown bold markers (**), asterisks for styling, HTML tags, or complicated formatting.\n- Do not overuse emojis. Avoid huge blocks of text.\n- Use clear, natural, encouraging language without sounding childish or making unrealistic promises.\n- Normally keep each reply around 80–160 words; go longer only when the learner asks for detail.\n- Never send more than one lesson step in a single reply.\n\nCOURSE TOPICS — TEACH ONLY WHEN THE LEARNER REACHES THEM\n1. Affiliate marketing: what it is, how a tracked link works, and a simple example.\n2. EarnKaro: what the platform does, how retailer offers and Profit Links work, and how commissions are tracked.\n3. Eligibility and safety: EarnKaro's terms say members should be 18 or older; people under 18 may access only with guidance and supervision of a parent or legal guardian. A minor must not create an account, submit identity/bank details, or handle payments alone. Tell them to ask a parent/legal guardian to review the current terms and supervise any permitted activity. Never suggest a false age or bypassing checks.\n4. Finding a retailer product and making a Profit Link using EarnKaro's current Make Links flow. If unsure about current interface details, tell the learner to follow the current in-app instructions rather than inventing buttons.\n5. Choosing a product people genuinely need: useful benefit, fair price, reliable retailer, recent reviews, clear product details, real offer, and suitable category. Avoid fake discounts, false scarcity, misleading images, copied claims, and exaggerated promises.\n6. Writing a short, honest product caption and sharing responsibly.\n7. Shopper's Suggestions: https://shopperssuggestions.online is a product-discovery and affiliate marketplace, not a retailer or shipping company. Promoters publish products there with descriptions, categories, images, and tracked product links. Visitors discover products and go to the retailer; the retailer handles orders and delivery. A product must first be uploaded and published on the website before the Telegram ads scheduler can promote it. /connect links an approved promoter account; /addproduct starts a product upload.\n8. Around the middle of the course, explain the Telegram groups: the free bot plan initially supports up to 3 verified Telegram groups/supergroups. The promoter must be an admin in each group and add the bot as an admin with only the permissions needed to post. Then run /adsverify inside each group. Invite friends or contacts only if they choose to join; never spam or add anyone without consent. The free scheduler sends eligible product ads about every 60 minutes. After 7 days, the promoter may add another batch of up to 3 groups; existing verified groups remain active. Explain this setup one action at a time and wait for the learner between actions.\n9. Explain how to check whether products are published and understand basic promotion status.\n\nIMPORTANT EARNKARO PROMOTION RESTRICTION\nEarnKaro terms restrict paid advertising that directs traffic to retailer platforms through EarnKaro. Do not recommend the bot's paid plan for EarnKaro Profit Links unless EarnKaro and the retailer explicitly confirm that this exact promotion is allowed. Prefer the free bot plan for EarnKaro links and tell the learner to check current programme rules. The optional bot plan is a separate service priced at ₹150 for 30 days, subject to admin approval; never pressure anyone to pay.\n\nTRUTHFULNESS\nCommissions depend on valid tracked purchases and retailer/programme approval. Orders that are cancelled, returned, rejected, excluded, or not tracked may not earn commission. Pending profit is not confirmed profit. Never promise income, guaranteed sales, a fixed commission, or a guaranteed payout date. Encourage honest sharing and checking the current official EarnKaro terms.\n\nFIRST LESSON\nThe bot code adds the exact opening line “you are ready to make some money?” before your first reply. After that, introduce only Step 1: explain affiliate marketing in a simple way with one relatable example, then ask whether the learner wants clarification or is ready for the next step. Do not explain EarnKaro registration, product selection, website uploads, or Telegram groups in this first reply.";
 
 
 async function reserveExplainAiRequest(env, telegramUserId) {
@@ -1592,7 +1582,7 @@ async function handleTelegramCallback(update, env) {
     if (data === "adsrun:free") {
       await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free',paid_until=NULL,updated_at=? WHERE telegram_user_id=?").bind(nowSql(),String(userId)).run();
       const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(String(userId)).first();
-      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups or channels where you are an admin and this bot can post. Use /adsverify inside each group, or /adsverify @ChannelUsername here.\\n\\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 20 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups or channels where you are an admin and this bot can post. Use /adsverify inside each group, or /adsverify @ChannelUsername here.\\n\\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 7 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
     } else {
       const qr=await getAdsQr(env);
       if(!qr){await telegramApi(env,"sendMessage",{chat_id:chatId,text:"⭐ Paid Plan QR is not configured yet. Please try again later."});return;}
@@ -1720,9 +1710,34 @@ async function verifyAdsGroup(env, message, args = "") {
   const countRow = await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(telegramUserId).first();
   const currentCount = Number(countRow?.total || 0);
   const account = await ensureAdsAccount(env, telegramUserId);
-  const nextBatchAt = account?.next_group_batch_at ? Date.parse(String(account.next_group_batch_at).replace(" ", "T") + "Z") : 0;
-  if (currentCount >= 3 && currentCount % 3 === 0 && nextBatchAt && nextBatchAt > Date.now()) {
-    const daysLeft = Math.ceil((nextBatchAt - Date.now()) / 86400000);
+  let nextBatchAtMs = account?.next_group_batch_at
+    ? Date.parse(String(account.next_group_batch_at).replace(" ", "T") + "Z")
+    : NaN;
+
+  // Reconstruct missing or stale cooldown state from the latest completed
+  // batch. This prevents NULL/old timestamps from bypassing the 7-day rule.
+  if (currentCount >= 3 && currentCount % 3 === 0) {
+    const completedBatchNumber = Math.floor((currentCount - 1) / 3) + 1;
+    const completedBatch = await env.DB.prepare(
+      "SELECT MAX(verified_at) AS completed_at FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1 AND batch_number=?"
+    ).bind(telegramUserId, completedBatchNumber).first();
+    if (completedBatch?.completed_at) {
+      const completedAtMs = Date.parse(String(completedBatch.completed_at).replace(" ", "T") + "Z");
+      if (Number.isFinite(completedAtMs)) {
+        const derivedBatchAtMs = completedAtMs + 7 * 86400000;
+        if (!Number.isFinite(nextBatchAtMs) || derivedBatchAtMs > nextBatchAtMs) {
+          nextBatchAtMs = derivedBatchAtMs;
+          const repairedAt = new Date(derivedBatchAtMs).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
+          await env.DB.prepare(
+            "UPDATE telegram_ads_accounts SET next_group_batch_at=?,updated_at=? WHERE telegram_user_id=?"
+          ).bind(repairedAt, nowSql(), telegramUserId).run();
+        }
+      }
+    }
+  }
+
+  if (currentCount >= 3 && currentCount % 3 === 0 && Number.isFinite(nextBatchAtMs) && nextBatchAtMs > Date.now()) {
+    const daysLeft = Math.ceil((nextBatchAtMs - Date.now()) / 86400000);
     await telegramApi(env, "sendMessage", { chat_id: replyChatId, text: "Your next 3-chat batch opens in about " + daysLeft + " day(s). Previously verified chats stay active." });
     return;
   }
@@ -1739,7 +1754,7 @@ async function verifyAdsGroup(env, message, args = "") {
   const newCount = currentCount + 1;
   const batchNumber = Math.floor(currentCount / 3) + 1;
   const batchComplete = newCount % 3 === 0;
-  const nextBatch = batchComplete ? adsSqlAfterDays(20) : (account?.next_group_batch_at || null);
+  const nextBatch = batchComplete ? adsSqlAfterDays(7) : (account?.next_group_batch_at || null);
   await env.DB.prepare("INSERT INTO telegram_ads_verified_chats (chat_id,telegram_user_id,chat_type,title,verified_at,active,batch_number) VALUES (?,?,?,?,?,1,?) ON CONFLICT(chat_id) DO UPDATE SET telegram_user_id=excluded.telegram_user_id,chat_type=excluded.chat_type,title=excluded.title,verified_at=excluded.verified_at,active=1,batch_number=excluded.batch_number")
     .bind(chatId, telegramUserId, targetChat.type, cleanText(targetChat.title || targetChat.username || "Telegram chat", 200), nowSql(), batchNumber).run();
   await recordTelegramChat(env, targetChat);
@@ -1749,7 +1764,7 @@ async function verifyAdsGroup(env, message, args = "") {
   await telegramApi(env, "sendMessage", {
     chat_id: replyChatId,
     text: "Verified " + (targetChat.type === "channel" ? "channel" : "group") + " (" + newCount + " total). " +
-      (batchComplete ? "You can add 3 more groups or channels in 20 days." : "Add " + (3 - (newCount % 3)) + " more group(s) or channel(s) in this batch.")
+      (batchComplete ? "You can add 3 more groups or channels in 7 days." : "Add " + (3 - (newCount % 3)) + " more group(s) or channel(s) in this batch.")
   });
 }
 async function handleTelegramUpdate(update, env) {
@@ -2065,7 +2080,7 @@ async function handleTelegramUpdate(update, env) {
     }
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "📢 <b>Shopper's Suggestions Ads</b>\n\nChoose a promotion plan:\n\n🆓 <b>Free Plan</b> — 3 groups initially, then 3 more every 20 days; all groups stay active. Ads every 60 minutes.\n\n⭐ <b>Paid Plan</b> — ₹150 / 30 days, activated after admin approval. Ads every 30 minutes.\n\nChoose below to continue.",
+      text: "📢 <b>Shopper's Suggestions Ads</b>\n\nChoose a promotion plan:\n\n🆓 <b>Free Plan</b> — 3 groups initially, then 3 more every 7 days; all groups stay active. Ads every 60 minutes.\n\n⭐ <b>Paid Plan</b> — ₹150 / 30 days, activated after admin approval. Ads every 30 minutes.\n\nChoose below to continue.",
       parse_mode: "HTML",
       reply_markup: { inline_keyboard: [[
         { text: "🆓 Free Plan", callback_data: "adsrun:free" },
@@ -3047,7 +3062,12 @@ async function runTelegramAdsScheduler(env) {
     let products = [];
     try { products = await getTelegramPromoterProducts(env, link.chat_id, userId); }
     catch (error) { console.error("Ads scheduler product lookup failed", userId, error); continue; }
-    products = (products || []).filter(p => Number(p.published) === 1 && p.id != null);
+    products = (products || []).filter(p => {
+      if (Number(p.published) !== 1 || p.id == null) return false;
+      if (!p.expires_at) return true;
+      const expiresAt = Date.parse(String(p.expires_at).replace(" ", "T") + "Z");
+      return !Number.isFinite(expiresAt) || expiresAt > Date.now();
+    });
     if (!products.length) continue;
     const eligible = [];
     let earliestCooldown = 0;
