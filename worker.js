@@ -637,8 +637,12 @@ async function cleanupExpiredProducts(env) {
   const newlyExpired = await env.DB.prepare(
     "SELECT id,uploader_id FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP LIMIT 200"
   ).all();
+  const expiringCounts = await env.DB.prepare(
+    "SELECT uploader_id,COUNT(*) AS total FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP AND uploader_id IS NOT NULL GROUP BY uploader_id"
+  ).all();
+  const expiringByUser = new Map((expiringCounts.results || []).map(row => [String(row.uploader_id), Number(row.total || 0)]));
   for (const product of newlyExpired.results || []) {
-    if (product.uploader_id != null) {
+    if (product.uploader_id != null && expiringByUser.get(String(product.uploader_id)) === 1) {
       try { await applyPromoterExpiryCooldown(env, Number(product.uploader_id)); }
       catch (error) { console.error("Promoter expiry cooldown failed:", product.id, error); }
     }
@@ -788,13 +792,13 @@ async function applyPromoterRemovalCooldown(env, userId, product) {
 
 async function applyPromoterExpiryCooldown(env, userId) {
   if (!userId || !(await approvedPromoter(env, userId))) return;
-  // The expiring row is still published at this point. Apply the 3-day block
-  // only when exactly one listing is expiring and exactly three remain live,
-  // which means the promoter is moving from four live listings to three.
-  const counts = await env.DB.prepare(
-    "SELECT SUM(CASE WHEN expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS active_count, SUM(CASE WHEN expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS expired_count FROM products WHERE uploader_id=? AND published=1"
+  // The caller supplies the number of listings expiring in this cleanup pass,
+  // captured before any rows are updated. Only one expiring listing plus
+  // three still-live listings represents the intended 4-to-3 transition.
+  const active = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)"
   ).bind(userId).first();
-  if (Number(counts?.active_count || 0) !== 3 || Number(counts?.expired_count || 0) !== 1) return;
+  if (Number(active?.count || 0) !== 3) return;
   await env.DB.prepare(`INSERT INTO promoter_upload_cooldowns (user_id, blocked_until, updated_at)
     VALUES (?, datetime('now','+3 days'), CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET
