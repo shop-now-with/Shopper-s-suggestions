@@ -628,13 +628,11 @@ async function b2DeleteByName(env, fileName) {
   }
 }
 async function deleteB2ImageUrl(env, imageUrl) {
-  try {
-    const url = new URL(imageUrl);
-    const match = url.pathname.match(/^\/media-b2\/(.+)$/);
-    if (!match) return;
-    const fileName = decodeURIComponent(match[1]);
-    if (/^products\/[a-zA-Z0-9._-]+$/.test(fileName)) await b2DeleteByName(env, fileName);
-  } catch (error) { console.error("Backblaze image cleanup failed:", error); }
+  const url = new URL(imageUrl);
+  const match = url.pathname.match(/^\/media-b2\/(.+)$/);
+  if (!match) return;
+  const fileName = decodeURIComponent(match[1]);
+  if (/^products\/[a-zA-Z0-9._-]+$/.test(fileName)) await b2DeleteByName(env, fileName);
 }
 async function handleMigrateImages(request, env) {
   if (!(await isAdmin(request, env))) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -806,15 +804,13 @@ async function deleteExpiredProductMedia(env, product) {
     if (!path.startsWith("media/")) { clear.add(field); continue; }
     const refs = await env.DB.prepare("SELECT id FROM products WHERE id != ? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1").bind(product.id, mediaUrl, mediaUrl, mediaUrl, mediaUrl, mediaUrl).first();
     if (refs) { clear.add(field); continue; }
-    try { await githubDelete(env, path, `Clean expired product ${product.id} media`); clear.add(field); }
-    catch (error) { console.error("Expired media cleanup failed; will retry on a later cleanup:", error); }
+    await githubDelete(env, path, `Clean expired product ${product.id} media`);
+    clear.add(field);
   }
   const videoUrl = product.video_url || "";
   if (videoUrl.startsWith(prefix)) {
-    try {
-      const path = decodeURIComponent(videoUrl.slice(prefix.length));
-      if (path.startsWith("media/") && !path.includes("..")) await githubDelete(env, path, `Clean expired product ${product.id} video`);
-    } catch (error) { console.error("Expired product video cleanup failed:", error); }
+    const path = decodeURIComponent(videoUrl.slice(prefix.length));
+    if (path.startsWith("media/") && !path.includes("..")) await githubDelete(env, path, `Clean expired product ${product.id} video`);
   }
   return clear;
 }
@@ -834,7 +830,7 @@ async function cleanupExpiredProducts(env) {
       catch (error) { console.error("Promoter expiry cooldown failed:", product.id, error); }
     }
     try { await deleteExpiredProductMedia(env, product); }
-    catch (error) { console.error("Expired product media cleanup failed:", product.id, error); }
+    catch (error) { console.error("Expired product media cleanup failed; product retained for retry:", product.id, error); continue; }
     await env.DB.prepare("DELETE FROM products WHERE id=?").bind(product.id).run();
   }
   return rows.length;
@@ -1106,24 +1102,18 @@ async function handleIntegrationProductById(request, env, productId) {
 
   if (request.method === "DELETE") {
     if (!adminRow) await applyPromoterRemovalCooldown(env, owner.id, existing);
-    const mediaUrls = [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean);
-    for (const mediaUrl of mediaUrls) {
-      try {
-        if (mediaUrl.includes("/media-b2/")) {
-          await deleteProductImageIfUnused(env, productId, mediaUrl);
-          continue;
-        }
-        const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
-        if (mediaUrl.startsWith(prefix)) {
-          const path = decodeURIComponent(mediaUrl.slice(prefix.length));
-          if (path.startsWith("media/")) {
-            const refs = await env.DB.prepare("SELECT id FROM products WHERE id != ? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1").bind(productId, mediaUrl, mediaUrl, mediaUrl, mediaUrl, mediaUrl).first();
-            if (!refs) await githubDelete(env, path, `Delete media for product ${productId}`);
-          }
-        }
-      } catch (error) {
-        console.error("GitHub media delete failed:", error);
+    try {
+      const mediaUrls = [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean);
+      for (const mediaUrl of mediaUrls) await deleteProductImageIfUnused(env, productId, mediaUrl);
+      const videoUrl = existing.video_url || "";
+      const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
+      if (videoUrl.startsWith(prefix)) {
+        const path = decodeURIComponent(videoUrl.slice(prefix.length));
+        if (path.startsWith("media/") && !path.includes("..")) await githubDelete(env, path, `Delete video for product ${productId}`);
       }
+    } catch (error) {
+      console.error("Integration product media cleanup failed; product retained:", productId, error);
+      return json({ ok: false, error: "Product media could not be removed. The product was kept so cleanup can be retried." }, 502);
     }
     await env.DB.prepare("DELETE FROM products WHERE id=? AND uploader_id=?").bind(productId, owner.id).run();
     return json({ ok: true, deleted: Number(productId) });
@@ -1151,6 +1141,7 @@ async function handleIntegrationProductById(request, env, productId) {
     if (value && !images[i - 1]) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
   }
   if (!admin && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
+  if (!adminRow && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
   } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
@@ -1267,19 +1258,18 @@ async function handleDeleteProduct(request, env, id) {
   if (!product) return json({ ok: false, error: "Product not found" }, 404);
   if (!admin && Number(product.uploader_id)!==Number(user?.id)) return json({ok:false,error:"Only the listing owner or an administrator can delete this product"},403);
   if (!admin) await applyPromoterRemovalCooldown(env, user.id, product);
-  const mediaUrls = [product.image1_url, product.image2_url, product.image3_url, product.image4_url, product.image5_url].filter(Boolean);
-  for (const mediaUrl of mediaUrls) {
-    try {
-      if (mediaUrl.includes("/media-b2/")) {
-        await deleteProductImageIfUnused(env, id, mediaUrl);
-        continue;
-      }
-      const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
-      if (mediaUrl.startsWith(prefix)) {
-        const path = decodeURIComponent(mediaUrl.slice(prefix.length));
-        if (path.startsWith("media/")) { const refs = await env.DB.prepare("SELECT id FROM products WHERE id != ? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1").bind(id,mediaUrl,mediaUrl,mediaUrl,mediaUrl,mediaUrl).first(); if (!refs) await githubDelete(env, path, `Delete media for product ${id}`); }
-      }
-    } catch (error) { console.error("GitHub media delete failed:", error); }
+  try {
+    const mediaUrls = [product.image1_url, product.image2_url, product.image3_url, product.image4_url, product.image5_url].filter(Boolean);
+    for (const mediaUrl of mediaUrls) await deleteProductImageIfUnused(env, id, mediaUrl);
+    const videoUrl = product.video_url || "";
+    const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
+    if (videoUrl.startsWith(prefix)) {
+      const path = decodeURIComponent(videoUrl.slice(prefix.length));
+      if (path.startsWith("media/") && !path.includes("..")) await githubDelete(env, path, `Delete video for product ${id}`);
+    }
+  } catch (error) {
+    console.error("Product media cleanup failed; product retained:", id, error);
+    return json({ ok: false, error: "Product media could not be removed. The product was kept so cleanup can be retried." }, 502);
   }
   await env.DB.prepare("DELETE FROM products WHERE id = ?").bind(id).run();
   return json({ ok: true, deleted: Number(id) });
