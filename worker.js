@@ -754,6 +754,21 @@ async function handleAdminCheck(request, env) {
   return json({ ok: true, authenticated: await isAdmin(request, env) });
 }
 
+async function deleteProductImageIfUnused(env, productId, mediaUrl) {
+  if (!mediaUrl) return;
+  const refs = await env.DB.prepare("SELECT id FROM products WHERE id != ? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1")
+    .bind(productId, mediaUrl, mediaUrl, mediaUrl, mediaUrl, mediaUrl).first();
+  if (refs) return;
+  if (mediaUrl.includes("/media-b2/")) {
+    await deleteB2ImageUrl(env, mediaUrl);
+    return;
+  }
+  const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
+  if (mediaUrl.startsWith(prefix)) {
+    const path = decodeURIComponent(mediaUrl.slice(prefix.length));
+    if (path.startsWith("media/") && !path.includes("..")) await githubDelete(env, path, `Delete media for product ${productId}`);
+  }
+}
 async function deleteExpiredProductMedia(env, product) {
   const fields = ["image1_url", "image2_url", "image3_url", "image4_url", "image5_url"];
   const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
@@ -761,6 +776,12 @@ async function deleteExpiredProductMedia(env, product) {
   for (const field of fields) {
     const mediaUrl = product[field];
     if (!mediaUrl) { clear.add(field); continue; }
+    if (mediaUrl.includes("/media-b2/")) {
+      const refs = await env.DB.prepare("SELECT id FROM products WHERE id != ? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1").bind(product.id, mediaUrl, mediaUrl, mediaUrl, mediaUrl, mediaUrl).first();
+      if (!refs) await deleteB2ImageUrl(env, mediaUrl);
+      clear.add(field);
+      continue;
+    }
     if (!mediaUrl.startsWith(prefix)) { clear.add(field); continue; }
     let path = "";
     try { path = decodeURIComponent(mediaUrl.slice(prefix.length)); } catch { continue; }
@@ -1018,7 +1039,7 @@ async function handleIntegrationProduct(request, env) {
   }
   const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
   if (!isAdmin && mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix))) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
     if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
   }
   const permanent = isAdmin && isTrue(body.permanent);
@@ -1054,6 +1075,10 @@ async function handleIntegrationProductById(request, env, productId) {
     const mediaUrls = [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean);
     for (const mediaUrl of mediaUrls) {
       try {
+        if (mediaUrl.includes("/media-b2/")) {
+          await deleteProductImageIfUnused(env, productId, mediaUrl);
+          continue;
+        }
         const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
         if (mediaUrl.startsWith(prefix)) {
           const path = decodeURIComponent(mediaUrl.slice(prefix.length));
@@ -1136,7 +1161,7 @@ async function handleCreateProduct(request, env) {
   const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
   const hasUploadedImage = !!mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix));
   if (!admin && hasUploadedImage) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
     if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. You can still use direct image links."},409);
   }
   if (uploaderId !== null) {
@@ -1210,6 +1235,10 @@ async function handleDeleteProduct(request, env, id) {
   const mediaUrls = [product.image1_url, product.image2_url, product.image3_url, product.image4_url, product.image5_url].filter(Boolean);
   for (const mediaUrl of mediaUrls) {
     try {
+      if (mediaUrl.includes("/media-b2/")) {
+        await deleteProductImageIfUnused(env, id, mediaUrl);
+        continue;
+      }
       const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
       if (mediaUrl.startsWith(prefix)) {
         const path = decodeURIComponent(mediaUrl.slice(prefix.length));
@@ -1239,7 +1268,7 @@ async function handleUploadMedia(request, env) {
   if (!(file instanceof File)) return json({ ok: false, error: "No file received" }, 400);
   const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(file.name);
   if (!admin && !isVideo) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media/%","%/media/%","%/media/%","%/media/%","%/media/%").first();
+    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
     if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
   }
   const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
@@ -1266,6 +1295,19 @@ async function handleDeleteMedia(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
   const suppliedPath = clean(body.path, 1000), suppliedUrl = clean(body.url, 3000);
+  if (suppliedUrl && suppliedUrl.includes("/media-b2/")) {
+    const match = new URL(suppliedUrl).pathname.match(/^\/media-b2\/(.+)$/);
+    if (!match) return json({ ok: false, error: "Invalid media URL" }, 400);
+    const fileName = decodeURIComponent(match[1]);
+    if (!/^products\/[a-zA-Z0-9._-]+$/.test(fileName)) return json({ ok: false, error: "Invalid media path" }, 400);
+    await b2DeleteByName(env, fileName);
+    return json({ ok: true, deleted: fileName });
+  }
+  if (suppliedPath.startsWith("products/")) {
+    if (!/^products\/[a-zA-Z0-9._-]+$/.test(suppliedPath)) return json({ ok: false, error: "Invalid media path" }, 400);
+    await b2DeleteByName(env, suppliedPath);
+    return json({ ok: true, deleted: suppliedPath });
+  }
   let path = suppliedPath;
   if (!path && suppliedUrl) {
     const prefix = `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/`;
