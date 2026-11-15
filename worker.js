@@ -508,6 +508,147 @@ async function githubDelete(env, path, message) {
   if (!response.ok) throw new Error(`GitHub delete failed: ${response.status}`);
   return true;
 }
+
+// Backblaze B2 private image storage. Videos continue using the existing GitHub media path.
+function b2MediaUrl(request, fileName) {
+  return new URL("/media-b2/" + encodeURIComponent(fileName), request.url).toString();
+}
+async function b2Authorize(env) {
+  if (!env.B2_KEY_ID || !env.B2_APPLICATION_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) throw new Error("Backblaze B2 storage is not configured. Check the four B2 Worker secrets.");
+  const response = await fetch("https://api.backblazeb2.com/b2api/v3/b2_authorize_account", {
+    headers: { Authorization: "Basic " + btoa(env.B2_KEY_ID + ":" + env.B2_APPLICATION_KEY) }
+  });
+  if (!response.ok) throw new Error("Backblaze authorization failed: " + response.status);
+  return response.json();
+}
+async function b2Upload(env, fileName, bytes, contentType) {
+  const auth = await b2Authorize(env);
+  const urlResponse = await fetch(auth.apiUrl + "/b2api/v3/b2_get_upload_url", {
+    method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID })
+  });
+  if (!urlResponse.ok) throw new Error("Backblaze upload URL request failed: " + urlResponse.status);
+  const uploadInfo = await urlResponse.json();
+  const digest = await crypto.subtle.digest("SHA-1", bytes);
+  const sha1 = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+  const uploaded = await fetch(uploadInfo.uploadUrl, {
+    method: "POST",
+    headers: { Authorization: uploadInfo.authorizationToken, "X-Bz-File-Name": encodeURIComponent(fileName), "Content-Type": contentType, "X-Bz-Content-Sha1": sha1 },
+    body: bytes
+  });
+  if (!uploaded.ok) throw new Error("Backblaze file upload failed: " + uploaded.status + " " + (await uploaded.text()).slice(0, 200));
+  return { ...(await uploaded.json()), fileName };
+}
+function safeRemoteImageUrl(value) {
+  let url;
+  try { url = new URL(value); } catch { return false; }
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (/^(0|10|127|169\.254|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host)) return false;
+  if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return false;
+  return true;
+}
+async function importImageToB2(request, env, suppliedUrl) {
+  const value = clean(suppliedUrl, 3000);
+  if (!value) return "";
+  const url = validHttpUrl(value);
+  if (!url || !safeRemoteImageUrl(url)) throw new Error("Image URL must point to a public HTTP or HTTPS image.");
+  if (url.startsWith(new URL("/media-b2/", request.url).toString())) return url;
+  let response, current = url;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (!safeRemoteImageUrl(current)) throw new Error("Image URL redirects to a blocked address.");
+    response = await fetch(current, { redirect: "manual", headers: { Accept: "image/*" } });
+    if (![301,302,303,307,308].includes(response.status)) break;
+    const location = response.headers.get("Location");
+    if (!location) throw new Error("Image host returned an invalid redirect.");
+    current = new URL(location, current).toString();
+  }
+  if (!response || !response.ok) throw new Error("Could not download image from its URL.");
+  const contentType = (response.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+  if (!contentType.startsWith("image/")) throw new Error("The supplied URL did not return an image.");
+  if (Number(response.headers.get("Content-Length") || 0) > 15 * 1024 * 1024) throw new Error("Image is too large. Maximum 15 MB.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 15 * 1024 * 1024) throw new Error("Image is empty or exceeds the 15 MB limit.");
+  const fileName = "products/" + Date.now() + "-" + crypto.randomUUID() + "." + safeExtension(new URL(current).pathname, contentType);
+  await b2Upload(env, fileName, bytes, contentType);
+  return b2MediaUrl(request, fileName);
+}
+async function handleB2Media(request, env, encodedName) {
+  if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405 });
+  let fileName;
+  try { fileName = decodeURIComponent(encodedName); } catch { return new Response("Not found", { status: 404 }); }
+  if (!fileName || fileName.includes("..") || fileName.startsWith("/") || !/^products\/[a-zA-Z0-9._-]+$/.test(fileName)) return new Response("Not found", { status: 404 });
+  const auth = await b2Authorize(env);
+  const response = await fetch(auth.downloadUrl + "/file/" + encodeURIComponent(env.B2_BUCKET_NAME) + "/" + encodeURIComponent(fileName), {
+    headers: { Authorization: auth.authorizationToken }
+  });
+  if (!response.ok) return new Response("Media not found", { status: response.status === 404 ? 404 : 502 });
+  const headers = new Headers({
+    "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff"
+  });
+  if (response.headers.get("Content-Length")) headers.set("Content-Length", response.headers.get("Content-Length"));
+  return new Response(request.method === "HEAD" ? null : response.body, { status: 200, headers });
+}
+async function b2DeleteByName(env, fileName) {
+  const auth = await b2Authorize(env);
+  const listedResponse = await fetch(auth.apiUrl + "/b2api/v3/b2_list_file_names", {
+    method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID, startFileName: fileName, maxFileCount: 100 })
+  });
+  if (!listedResponse.ok) throw new Error("Backblaze file lookup failed: " + listedResponse.status);
+  const listed = await listedResponse.json();
+  for (const file of listed.files || []) {
+    if (file.fileName !== fileName) continue;
+    const deleted = await fetch(auth.apiUrl + "/b2api/v3/b2_delete_file_version", {
+      method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: file.fileName, fileId: file.fileId })
+    });
+    if (!deleted.ok) throw new Error("Backblaze delete failed: " + deleted.status);
+  }
+}
+async function deleteB2ImageUrl(env, imageUrl) {
+  try {
+    const url = new URL(imageUrl);
+    const match = url.pathname.match(/^\/media-b2\/(.+)$/);
+    if (!match) return;
+    const fileName = decodeURIComponent(match[1]);
+    if (/^products\/[a-zA-Z0-9._-]+$/.test(fileName)) await b2DeleteByName(env, fileName);
+  } catch (error) { console.error("Backblaze image cleanup failed:", error); }
+}
+async function handleMigrateImages(request, env) {
+  if (!(await isAdmin(request, env))) return json({ ok: false, error: "Unauthorized" }, 401);
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  const prefix = "https://raw.githubusercontent.com/" + env.GITHUB_OWNER + "/" + env.GITHUB_REPO + "/" + (env.GITHUB_BRANCH || "main") + "/media/%";
+  const columns = ["image1_url","image2_url","image3_url","image4_url","image5_url"];
+  const pending = [];
+  for (const column of columns) {
+    const rows = await env.DB.prepare("SELECT id, " + column + " AS image_url FROM products WHERE " + column + " LIKE ? ORDER BY id LIMIT 5").bind(prefix).all();
+    for (const row of rows.results || []) pending.push({ id: row.id, column, url: row.image_url });
+  }
+  const batch = pending.slice(0, 5);
+  let migrated = 0, failed = 0;
+  const errors = [];
+  for (const item of batch) {
+    try {
+      const newUrl = await importImageToB2(request, env, item.url);
+      await env.DB.prepare("UPDATE products SET " + item.column + "=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND " + item.column + "=?").bind(newUrl, item.id, item.url).run();
+      migrated++;
+    } catch (error) {
+      failed++;
+      errors.push({ product_id: item.id, image: item.column, error: String(error?.message || error).slice(0, 180) });
+    }
+  }
+  let remaining = 0;
+  for (const column of columns) {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE " + column + " LIKE ?").bind(prefix).first();
+    remaining += Number(row?.count || 0);
+  }
+  return json({ ok: true, processed: batch.length, migrated, failed, remaining, errors });
+}
+
 function safeExtension(filename, contentType = "") {
   const match = String(filename || "").toLowerCase().match(/\.([a-z0-9]{1,8})$/);
   const allowed = ["jpg", "jpeg", "png", "webp", "gif", "avif", "mp4", "webm", "mov"];
@@ -1095,8 +1236,13 @@ async function handleUploadMedia(request, env) {
   const extension = safeExtension(file.name, file.type);
   const filename = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
   const path = `media/${filename}`;
-  const uploaded = await githubUpload(env, path, new Uint8Array(await file.arrayBuffer()), file.type || (isVideo ? "video/mp4" : "image/jpeg"), `Upload media ${filename}`);
-  return json({ ok: true, url: uploaded.url, path: uploaded.path, type: isVideo ? "video" : "image" });
+  if (!isVideo) {
+    const fileName = "products/" + filename;
+    await b2Upload(env, fileName, new Uint8Array(await file.arrayBuffer()), file.type || "image/jpeg");
+    return json({ ok: true, url: b2MediaUrl(request, fileName), path: fileName, type: "image" });
+  }
+  const uploaded = await githubUpload(env, path, new Uint8Array(await file.arrayBuffer()), file.type || "video/mp4", `Upload media ${filename}`);
+  return json({ ok: true, url: uploaded.url, path: uploaded.path, type: "video" });
   } catch (error) {
     const diagnostic = String(error?.message || error || "Unknown upload error").slice(0, 400);
     console.error("MEDIA_UPLOAD_FAILED:", diagnostic, error?.stack || "");
@@ -1718,6 +1864,8 @@ export default {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS" } });
       await ensureSchema(env);
       const url = new URL(request.url), path = url.pathname;
+      const b2MediaMatch = path.match(/^\/media-b2\/(.+)$/);
+      if (b2MediaMatch) return handleB2Media(request, env, b2MediaMatch[1]);
       if (path === "/api/health") return json({ ok: true, service: "shopper-s-suggestions-web", build: "2026-10-21-megfo-marketplace-v1", database: "connected", googleOAuthConfigured: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: !!(env.RESEND_API_KEY && env.EMAIL_FROM), paymentStatus: env.PAYMENT_PROVIDER && env.PAYMENT_API_KEY ? "provider-configured-but-checkout-not-enabled" : "setup-required" });
       if (path === "/api/christmas/letters" && request.method === "POST") return handleCreateChristmasLetter(request, env);
       const christmasLetterMatch = path.match(/^\/api\/christmas\/letters\/([a-f0-9]{48})$/);
@@ -1764,6 +1912,7 @@ export default {
       if (path === "/api/integrations/products" && ["GET", "POST"].includes(request.method)) return handleIntegrationProduct(request, env);
       const integrationProductMatch = path.match(/^\/api\/integrations\/products\/(\d+)$/);
       if (integrationProductMatch && ["PUT", "PATCH", "DELETE"].includes(request.method)) return handleIntegrationProductById(request, env, Number(integrationProductMatch[1]));
+      if (path === "/api/admin/migrate-images" && request.method === "POST") return handleMigrateImages(request, env);
       if (path === "/api/upload-media" && request.method === "POST") return handleUploadMedia(request, env);
       if (path === "/api/delete-media" && request.method === "POST") return handleDeleteMedia(request, env);
       if (path === "/api/products" && request.method === "GET") return handleProducts(request, env);
