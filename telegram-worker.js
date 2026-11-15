@@ -1902,7 +1902,7 @@ async function handleTelegramUpdate(update, env) {
     s.step = "connect_api_key";
     s.data = {};
     await saveTelegramSession(env, s);
-    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔐 Send your Shopper's Suggestions Promoter API key in your next message. It will be verified and stored encrypted. Never send your key in a group." });
+    await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🔐 Send your Shopper's Suggestions API key to connect your account. Never share your key in a group." });
     return;
   }
 
