@@ -260,6 +260,9 @@ async function uploadTelegramMediaToWebsite(env, apiKey, file) {
   if (!response.ok || !data.ok || !data.url) {
     throw new Error(data.error || data.diagnostic || `Media upload failed (HTTP ${response.status}).`);
   }
+  if (String(file.type || "").startsWith("image/") && !String(data.url).includes("/media-b2/")) {
+    throw new Error("The website did not return a Backblaze image URL. The image was not attached to the product.");
+  }
   return data.url;
 }
 
@@ -1649,7 +1652,7 @@ async function handleTelegramCallback(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: `Category selected: ${category}\n\nSend up to 2 images (photo or direct image URL). You can also send one video up to 100 MB. Type done when finished, or skip to publish without media.`
+      text: `Category selected: ${category}\n\nSend up to 2 images (photo or direct image URL). Telegram video uploads are limited to 20 MB; the website upload page supports videos up to 100 MB. Type done when finished, or skip to publish without media.`
     });
   }
 }
@@ -2792,7 +2795,7 @@ async function handleTelegramUpdate(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "Category selected: " + category + "\n\nSend up to 2 images. You can upload a photo or send a direct image URL. Type done to continue, or skip to publish without images."
+      text: "Category selected: " + category + "\n\nSend up to 2 images. Photos are copied to secure image storage when uploaded; direct image URLs are copied there when you publish. Telegram video uploads are limited to 20 MB, while the website supports videos up to 100 MB. Type done to review, or skip to publish without images."
     });
     return;
   }
@@ -2824,14 +2827,14 @@ async function handleTelegramUpdate(update, env) {
       try {
         const photo = message.photo[message.photo.length - 1];
         const file = await downloadTelegramFile(env, photo.file_id, "image");
-        if (file.bytes.length > 15 * 1024 * 1024) throw new Error("That image is larger than 15 MB. Please send a smaller image.");
+        if (Number(photo.file_size || 0) > 15 * 1024 * 1024 || file.bytes.length > 15 * 1024 * 1024) throw new Error("That image is larger than 15 MB. Please send a smaller image.");
         const link = await getPromoterTelegramLink(env, userId);
         if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Reconnect your Shopper's Suggestions account with /connect.");
         const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
         const imageUrl = await uploadTelegramMediaToWebsite(env, apiKey, file);
         s.data.images = [...currentImages, imageUrl];
         await saveTelegramSession(env, s);
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded to secure storage (" + s.data.images.length + "/2). Send one more photo or image URL, or type done to review." });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded to Backblaze image storage (" + s.data.images.length + "/2). Send one more photo or image URL, or type done to review." });
       } catch (error) {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Image upload failed: " + escapeTelegramHtml(error.message || "Please try another image."), parse_mode: "HTML" });
       }
@@ -2846,7 +2849,7 @@ async function handleTelegramUpdate(update, env) {
       }
       try {
         const file = await downloadTelegramFile(env, incomingVideo.file_id, "video");
-        if (file.bytes.length > 20 * 1024 * 1024) throw new Error("Telegram bot downloads are limited to 20 MB per video. Upload larger videos through the website.");
+        if (Number(incomingVideo.file_size || 0) > 20 * 1024 * 1024 || file.bytes.length > 20 * 1024 * 1024) throw new Error("Telegram bot downloads are limited to 20 MB per video. Upload larger videos on the website, which supports up to 100 MB.");
         const link = await getPromoterTelegramLink(env, userId);
         if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Reconnect your Shopper's Suggestions account with /connect.");
         const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
@@ -2881,7 +2884,7 @@ async function handleTelegramUpdate(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "✅ Image link " + s.data.images.length + "/2 saved. Send another direct image URL or type done to review."
+      text: "✅ Image link " + s.data.images.length + "/2 saved. It will be copied into Backblaze image storage when you publish. Send another direct image URL or type done to review."
     });
     return;
   }
