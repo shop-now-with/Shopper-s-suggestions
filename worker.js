@@ -1635,7 +1635,10 @@ async function handleAdminUserAction(request, env, userId) {
     const products = await env.DB.prepare("SELECT * FROM products WHERE uploader_id=?").bind(id).all();
     for (const product of products.results || []) {
       try { await deleteExpiredProductMedia(env, product); }
-      catch (error) { console.error("User removal media cleanup failed:", error); }
+      catch (error) {
+        console.error("User removal media cleanup failed; account retained:", id, error);
+        return json({ ok: false, error: "Some product media could not be removed. The account was kept so cleanup can be retried." }, 502);
+      }
     }
     await env.DB.prepare("DELETE FROM products WHERE uploader_id=?").bind(id).run();
     await env.DB.prepare("DELETE FROM promoters WHERE user_id=?").bind(id).run();
