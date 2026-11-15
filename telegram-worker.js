@@ -261,7 +261,7 @@ async function uploadTelegramMediaToWebsite(env, apiKey, file) {
     throw new Error(data.error || data.diagnostic || `Media upload failed (HTTP ${response.status}).`);
   }
   if (String(file.type || "").startsWith("image/") && !String(data.url).includes("/media-b2/")) {
-    throw new Error("The website did not return a Backblaze image URL. The image was not attached to the product.");
+    throw new Error("The website did not return a usable image link. The image was not attached to the product.");
   }
   return data.url;
 }
@@ -1367,7 +1367,7 @@ async function githubRequest(env, method, path, body) {
   const owner = cleanText(env.GITHUB_OWNER);
   const repo = cleanText(env.GITHUB_REPO);
   const token = cleanText(env.GITHUB_TOKEN);
-  if (!owner || !repo || !token) throw new Error("GitHub media storage is not configured.");
+  if (!owner || !repo || !token) throw new Error("Media service is not configured.");
 
   const response = await fetch(githubApiUrl(owner, repo, path), {
     method,
@@ -1383,7 +1383,7 @@ async function githubRequest(env, method, path, body) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`GitHub ${method} ${path} failed: ${response.status} ${JSON.stringify(data)}`);
+    throw new Error(`Media service request failed: ${response.status}`);
   }
   return data;
 }
@@ -2956,7 +2956,7 @@ async function handleTelegramUpdate(update, env) {
         const imageUrl = await uploadTelegramMediaToWebsite(env, apiKey, file);
         s.data.images = [...currentImages, imageUrl];
         await saveTelegramSession(env, s);
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded to Backblaze image storage (" + s.data.images.length + "/2). Send one more photo or image URL, or type done to review." });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded to secure media storage (" + s.data.images.length + "/2). Send one more photo or image URL, or type done to review." });
       } catch (error) {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Image upload failed: " + escapeTelegramHtml(error.message || "Please try another image."), parse_mode: "HTML" });
       }
@@ -3006,7 +3006,7 @@ async function handleTelegramUpdate(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "✅ Image link " + s.data.images.length + "/2 saved. It will be copied into Backblaze image storage when you publish. Send another direct image URL or type done to review."
+      text: "✅ Image link " + s.data.images.length + "/2 saved. It will be saved securely when you publish. Send another direct image URL or type done to review."
     });
     return;
   }
