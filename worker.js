@@ -544,7 +544,7 @@ function safeRemoteImageUrl(value) {
   try { url = new URL(value); } catch { return false; }
   if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return false;
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (!host || host.includes(":") || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
   if (/^(0|10|127|169\.254|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host)) return false;
   if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return false;
   return true;
@@ -1037,8 +1037,7 @@ async function handleIntegrationProduct(request, env) {
     const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(owner.id).first();
     if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
-  const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
-  if (!isAdmin && mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix))) {
+  if (!isAdmin && images.some(url=>url&&url.includes("/media-b2/"))) {
     const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
     if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
   }
@@ -1158,8 +1157,7 @@ async function handleCreateProduct(request, env) {
     if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
   const permanent = !!admin && isTrue(body.permanent);
-  const mediaPrefix = env.GITHUB_OWNER ? `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH||"main"}/media/` : "";
-  const hasUploadedImage = !!mediaPrefix && images.some(url=>url&&url.startsWith(mediaPrefix));
+  const hasUploadedImage = images.some(url=>url&&url.includes("/media-b2/"));
   if (!admin && hasUploadedImage) {
     const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
     if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. You can still use direct image links."},409);
