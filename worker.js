@@ -641,7 +641,7 @@ async function handleMigrateImages(request, env) {
   const columns = ["image1_url","image2_url","image3_url","image4_url","image5_url"];
   const pending = [];
   for (const column of columns) {
-    const rows = await env.DB.prepare("SELECT id, " + column + " AS image_url FROM products WHERE " + column + " LIKE ? ORDER BY id LIMIT 5").bind(prefix).all();
+    const rows = await env.DB.prepare("SELECT id, " + column + " AS image_url FROM products WHERE " + column + " IS NOT NULL AND " + column + "<>'' AND " + column + " NOT LIKE '%/media-b2/%' ORDER BY id LIMIT 5").all();
     for (const row of rows.results || []) pending.push({ id: row.id, column, url: row.image_url });
   }
   const batch = pending.slice(0, 5);
@@ -659,7 +659,7 @@ async function handleMigrateImages(request, env) {
   }
   let remaining = 0;
   for (const column of columns) {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE " + column + " LIKE ?").bind(prefix).first();
+    const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE " + column + " IS NOT NULL AND " + column + "<>'' AND " + column + " NOT LIKE '%/media-b2/%'").first();
     remaining += Number(row?.count || 0);
   }
   return json({ ok: true, processed: batch.length, migrated, failed, remaining, errors });
@@ -1152,6 +1152,12 @@ async function handleIntegrationProductById(request, env, productId) {
   } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
   await env.DB.prepare("UPDATE products SET title=?,description=?,affiliate_url=?,category=?,image1_url=?,image2_url=?,image3_url=?,image4_url=?,image5_url=?,video_url=?,price=?,original_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND uploader_id=?")
     .bind(title, description, affiliateUrl, category, ...images, videoUrl || "", price, originalPrice, productId, owner.id).run();
+  for (const oldUrl of [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean)) {
+    if (!images.includes(oldUrl)) {
+      try { await deleteProductImageIfUnused(env, productId, oldUrl); }
+      catch (error) { console.error("Could not clean replaced integration image:", productId, error); }
+    }
+  }
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=? AND p.uploader_id=?`).bind(productId, owner.id).first();
   return json({ ok: true, product: productPublic(updated) });
 }
@@ -1250,6 +1256,12 @@ async function handleUpdateProduct(request, env, id) {
   }
   await env.DB.prepare(`UPDATE products SET title=?, description=?, affiliate_url=?, category=?, image1_url=?, image2_url=?, image3_url=?, image4_url=?, image5_url=?, video_url=?, published=?, featured=?, price=?, original_price=?, uploader_id=?, expires_at=?, listing_duration_hours=CASE WHEN ? IS NULL THEN 0 ELSE listing_duration_hours END, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .bind(title, description, affiliateUrl, category, ...images, videoUrl, published, featured, price, originalPrice, uploaderId ?? null, expiresAt, expiresAt, id).run();
+  for (const oldUrl of [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean)) {
+    if (!images.includes(oldUrl)) {
+      try { await deleteProductImageIfUnused(env, Number(id), oldUrl); }
+      catch (error) { console.error("Could not clean replaced product image:", id, error); }
+    }
+  }
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).bind(id).first();
   return json({ ok: true, product: productPublic(updated) });
 }
