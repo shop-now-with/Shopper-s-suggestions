@@ -1253,6 +1253,91 @@ function normalizeGitHubRawUrl(owner, repo, branch, path) {
   return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+function telegramB2MediaUrl(fileName) {
+  return SITE_URL + "/media-b2/" + encodeURIComponent(fileName);
+}
+async function telegramB2Authorize(env) {
+  if (!env.B2_KEY_ID || !env.B2_APPLICATION_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) {
+    throw new Error("Secure image storage is not ready on the Telegram Worker. Add the B2 storage secrets to that Worker.");
+  }
+  const response = await fetch("https://api.backblazeb2.com/b2api/v4/b2_authorize_account", {
+    headers: { Authorization: "Basic " + btoa(env.B2_KEY_ID + ":" + env.B2_APPLICATION_KEY) }
+  });
+  if (!response.ok) throw new Error("Secure image storage authorization failed (" + response.status + ").");
+  const data = await response.json();
+  const storage = data.apiInfo?.storageApi || {};
+  return { ...data, apiUrl: storage.apiUrl || data.apiUrl, downloadUrl: storage.downloadUrl || data.downloadUrl };
+}
+async function telegramB2Upload(env, fileName, bytes, contentType) {
+  const auth = await telegramB2Authorize(env);
+  const urlResponse = await fetch(auth.apiUrl + "/b2api/v4/b2_get_upload_url", {
+    method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID })
+  });
+  if (!urlResponse.ok) throw new Error("Could not prepare secure image upload (" + urlResponse.status + ").");
+  const uploadInfo = await urlResponse.json();
+  const digest = await crypto.subtle.digest("SHA-1", bytes);
+  const sha1 = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+  const uploaded = await fetch(uploadInfo.uploadUrl, {
+    method: "POST",
+    headers: { Authorization: uploadInfo.authorizationToken, "X-Bz-File-Name": encodeURIComponent(fileName), "Content-Type": contentType, "X-Bz-Content-Sha1": sha1 },
+    body: bytes
+  });
+  if (!uploaded.ok) throw new Error("Secure image upload failed (" + uploaded.status + ").");
+  return { ...(await uploaded.json()), fileName };
+}
+async function telegramB2DeleteByName(env, fileName) {
+  const auth = await telegramB2Authorize(env);
+  const listedResponse = await fetch(auth.apiUrl + "/b2api/v4/b2_list_file_names", {
+    method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID, startFileName: fileName, maxFileCount: 100 })
+  });
+  if (!listedResponse.ok) throw new Error("Secure image lookup failed (" + listedResponse.status + ").");
+  const listed = await listedResponse.json();
+  for (const file of listed.files || []) {
+    if (file.fileName !== fileName) continue;
+    const deleted = await fetch(auth.apiUrl + "/b2api/v4/b2_delete_file_version", {
+      method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: file.fileName, fileId: file.fileId })
+    });
+    if (!deleted.ok) throw new Error("Secure image deletion failed (" + deleted.status + ").");
+  }
+}
+async function importTelegramImageToB2(env, suppliedUrl) {
+  const value = cleanText(suppliedUrl, 3000);
+  if (!value) return "";
+  let url;
+  try { url = new URL(value); } catch { throw new Error("Image URL is invalid."); }
+  const host = url.hostname.toLowerCase();
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("Image URL must use http or https.");
+  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal") || host.startsWith("10.") || host.startsWith("127.") || host.startsWith("192.168.") || host.startsWith("169.254.") || host.startsWith("172.16.") || host.startsWith("172.17.") || host.startsWith("172.18.") || host.startsWith("172.19.") || host.startsWith("172.2") || host.startsWith("172.30.") || host.startsWith("172.31.")) throw new Error("Image URL must be publicly accessible.");
+  if (host === new URL(SITE_URL).hostname && url.pathname.startsWith("/media-b2/")) return url.href;
+  const response = await fetch(url.href, { redirect: "follow" });
+  if (!response.ok) throw new Error("Could not download the image URL.");
+  const contentType = (response.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+  if (!contentType.startsWith("image/")) throw new Error("The supplied URL did not return an image.");
+  if (Number(response.headers.get("Content-Length") || 0) > 15 * 1024 * 1024) throw new Error("Image must be 15 MB or smaller.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 15 * 1024 * 1024) throw new Error("Image must be 15 MB or smaller.");
+  const ext = extensionFromMime(contentType);
+  const fileName = "products/" + Date.now() + "-" + crypto.randomUUID() + "." + (ext === "bin" ? "jpg" : ext);
+  await telegramB2Upload(env, fileName, bytes, contentType);
+  return telegramB2MediaUrl(fileName);
+}
+async function cleanupTelegramProductImage(env, imageUrl) {
+  if (!imageUrl) return;
+  try {
+    const url = new URL(imageUrl);
+    const prefix = "/media-b2/";
+    if (url.pathname.startsWith(prefix)) {
+      const fileName = decodeURIComponent(url.pathname.slice(prefix.length));
+      if (fileName.startsWith("products/") && !fileName.includes("..")) await telegramB2DeleteByName(env, fileName);
+      return;
+    }
+  } catch {}
+  await githubDeleteByRawUrl(env, imageUrl);
+}
+
 function githubApiUrl(owner, repo, path = "") {
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`.replace(/contents\/$/, "contents");
 }
@@ -1442,6 +1527,7 @@ async function prepareProductInput(body, existing = {}) {
 async function createWebsiteProduct(request, env) {
   const body = await parseBody(request);
   const input = await prepareProductInput(body);
+  for (let i = 1; i <= 5; i++) if (input[`image${i}_url`]) input[`image${i}_url`] = await importTelegramImageToB2(env, input[`image${i}_url`]);
   const timestamp = nowSql();
   const result = await env.DB.prepare(`
     INSERT INTO products (
@@ -1468,6 +1554,10 @@ async function updateWebsiteProduct(request, env, id) {
   if (!existing) return api({ ok: false, error: "Product not found." }, request, 404);
   const body = await parseBody(request);
   const input = await prepareProductInput(body, existing);
+  for (let i = 1; i <= 5; i++) {
+    const field = `image${i}_url`;
+    if (input[field] && input[field] !== existing[field]) input[field] = await importTelegramImageToB2(env, input[field]);
+  }
   const oldMedia = productImages(existing);
 
   await env.DB.prepare(`
@@ -1486,7 +1576,7 @@ async function updateWebsiteProduct(request, env, id) {
   const newMedia = new Set(productImages(updated));
   for (const url of oldMedia) {
     if (url && !newMedia.has(url)) {
-      try { await githubDeleteByRawUrl(env, url); } catch { /* do not fail a database update because optional media cleanup failed */ }
+      try { await cleanupTelegramProductImage(env, url); } catch (error) { console.error("Could not clean replaced product image:", error); }
     }
   }
   return api({ ok: true, product: productPublic(updated) }, request);
@@ -1495,10 +1585,14 @@ async function updateWebsiteProduct(request, env, id) {
 async function deleteWebsiteProduct(request, env, id) {
   const product = await getProduct(env, id);
   if (!product) return api({ ok: false, error: "Product not found." }, request, 404);
-  await env.DB.prepare("DELETE FROM products WHERE id = ?").bind(id).run();
-  for (const url of [...productImages(product), product.video_url || ""]) {
-    try { await githubDeleteByRawUrl(env, url); } catch { /* optional cleanup */ }
+  try {
+    for (const url of productImages(product)) await cleanupTelegramProductImage(env, url);
+    if (product.video_url) await githubDeleteByRawUrl(env, product.video_url);
+  } catch (error) {
+    console.error("Product media cleanup failed; product retained:", id, error);
+    return api({ ok: false, error: "Product media could not be removed. The product was kept so cleanup can be retried." }, request, 502);
   }
+  await env.DB.prepare("DELETE FROM products WHERE id = ?").bind(id).run();
   return api({ ok: true, deleted: Number(id) }, request);
 }
 
@@ -1548,12 +1642,19 @@ async function handleUploadMedia(request, env) {
   const body = await request.formData();
   const file = body.get("file") || body.get("image") || body.get("media");
   if (!(file instanceof File)) return api({ ok: false, error: "No media file provided." }, request, 400);
-  if (file.size > 20 * 1024 * 1024) return api({ ok: false, error: "File is too large. Maximum 20 MB." }, request, 413);
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const contentType = file.type || mimeFromExtension(fileExtension(file.name, "jpg"));
+  const isImage = contentType.startsWith("image/");
+  const maxSize = isImage ? 15 * 1024 * 1024 : 20 * 1024 * 1024;
+  if (file.size <= 0 || file.size > maxSize) return api({ ok: false, error: isImage ? "Image must be 15 MB or smaller." : "File is too large. Maximum 20 MB." }, request, 413);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (isImage) {
+    const ext = extensionFromMime(contentType);
+    const fileName = "products/" + Date.now() + "-" + crypto.randomUUID() + "." + (ext === "bin" ? "jpg" : ext);
+    await telegramB2Upload(env, fileName, bytes, contentType);
+    return api({ ok: true, url: telegramB2MediaUrl(fileName), path: fileName, type: "image" }, request, 201);
+  }
   const result = await githubUpload(env, bytes, file.name, contentType);
-  return api({ ok: true, ...result }, request);
+  return api({ ok: true, ...result, type: "video" }, request, 201);
 }
 
 async function handleTelegramCallback(update, env) {
