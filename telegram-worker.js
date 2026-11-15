@@ -1258,7 +1258,8 @@ function telegramB2MediaUrl(fileName) {
 }
 async function telegramB2Authorize(env) {
   if (!env.B2_KEY_ID || !env.B2_APPLICATION_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) {
-    throw new Error("Secure image storage is not ready on the Telegram Worker. Add the B2 storage secrets to that Worker.");
+    console.error("Telegram Worker image storage configuration is incomplete.");
+    throw new Error("Image storage is temporarily unavailable. Please try again later.");
   }
   const response = await fetch("https://api.backblazeb2.com/b2api/v4/b2_authorize_account", {
     headers: { Authorization: "Basic " + btoa(env.B2_KEY_ID + ":" + env.B2_APPLICATION_KEY) }
