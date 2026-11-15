@@ -1034,7 +1034,7 @@ async function handleIntegrationProduct(request, env) {
     const value = body[`image${i}_url`] ?? (i === 1 ? body.image_url : "");
     const image = value ? validHttpUrl(clean(value, 3000)) : null;
     if (value && !image) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
-    images.push(image);
+    images.push(image || "");
   }
   if (!adminRow && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
@@ -1181,7 +1181,7 @@ async function handleCreateProduct(request, env) {
   if (!validCategory(category)) return json({ ok: false, error: "Invalid category" }, 400);
   if ((body.affiliate_url || body.affiliate_link || body.product_url) && !affiliateUrl) return json({ ok: false, error: "Shopping link must be a valid http or https URL" }, 400);
   const images = [];
-  for (let i = 1; i <= 5; i++) images.push(validHttpUrl(clean(body[`image${i}_url`], 3000)));
+  for (let i = 1; i <= 5; i++) images.push(validHttpUrl(clean(body[`image${i}_url`], 3000)) || "");
   if (!admin && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
