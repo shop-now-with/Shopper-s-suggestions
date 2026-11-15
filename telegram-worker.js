@@ -1307,9 +1307,9 @@ function safeTelegramImageUrl(value) {
   let url;
   try { url = new URL(value); } catch { return false; }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return false;
-  const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
-  if (!host || host.includes(":") || /^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(host) || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
-  if (/^(0|10|127|169\\.254|192\\.168|172\\.(1[6-9]|2\\d|3[01]))\\./.test(host)) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || host.includes(":") || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (/^(0|10|127|169\.254|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host)) return false;
   return true;
 }
 async function importTelegramImageToB2(env, suppliedUrl) {
