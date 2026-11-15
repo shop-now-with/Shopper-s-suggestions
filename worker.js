@@ -146,6 +146,22 @@ CREATE TABLE IF NOT EXISTS announcement_reads (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS announcement_dismissals (
+  user_id INTEGER NOT NULL,
+  announcement_id INTEGER NOT NULL,
+  dismissed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, announcement_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS notice_dismissals (
+  user_id INTEGER NOT NULL,
+  notice_id INTEGER NOT NULL,
+  dismissed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, notice_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (notice_id) REFERENCES login_notices(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS notice_reads (
   user_id INTEGER NOT NULL,
   notice_id INTEGER NOT NULL,
@@ -793,39 +809,35 @@ async function deleteExpiredProductMedia(env, product) {
     try { await githubDelete(env, path, `Clean expired product ${product.id} media`); clear.add(field); }
     catch (error) { console.error("Expired media cleanup failed; will retry on a later cleanup:", error); }
   }
+  const videoUrl = product.video_url || "";
+  if (videoUrl.startsWith(prefix)) {
+    try {
+      const path = decodeURIComponent(videoUrl.slice(prefix.length));
+      if (path.startsWith("media/") && !path.includes("..")) await githubDelete(env, path, `Clean expired product ${product.id} video`);
+    } catch (error) { console.error("Expired product video cleanup failed:", error); }
+  }
   return clear;
 }
 async function cleanupExpiredProducts(env) {
-  // Stage 1: after 72 hours, hide the listing from Home but keep it in the
-  // owner's uploaded list for a further 48 hours so it can still be bumped.
-  const newlyExpired = await env.DB.prepare(
-    "SELECT id,uploader_id FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP LIMIT 200"
+  // Expired listings are permanently removed as soon as the expiry time is reached.
+  const expired = await env.DB.prepare(
+    "SELECT * FROM products WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP LIMIT 200"
   ).all();
-  const expiringCounts = await env.DB.prepare(
-    "SELECT uploader_id,COUNT(*) AS total FROM products WHERE published=1 AND expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP AND uploader_id IS NOT NULL GROUP BY uploader_id"
+  const rows = expired.results || [];
+  const counts = await env.DB.prepare(
+    "SELECT uploader_id,COUNT(*) AS total FROM products WHERE expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP AND uploader_id IS NOT NULL GROUP BY uploader_id"
   ).all();
-  const expiringByUser = new Map((expiringCounts.results || []).map(row => [String(row.uploader_id), Number(row.total || 0)]));
-  for (const product of newlyExpired.results || []) {
-    if (product.uploader_id != null && expiringByUser.get(String(product.uploader_id)) === 1) {
+  const byUser = new Map((counts.results || []).map(row => [String(row.uploader_id), Number(row.total || 0)]));
+  for (const product of rows) {
+    if (product.uploader_id != null && byUser.get(String(product.uploader_id)) === 1) {
       try { await applyPromoterExpiryCooldown(env, Number(product.uploader_id)); }
       catch (error) { console.error("Promoter expiry cooldown failed:", product.id, error); }
     }
-    await env.DB.prepare(
-      "UPDATE products SET published=0, expired_at=COALESCE(expired_at,CURRENT_TIMESTAMP), updated_at=CURRENT_TIMESTAMP WHERE id=?"
-    ).bind(product.id).run();
-  }
-
-  // Stage 2: once the 48-hour bump window has passed, permanently delete
-  // the product row and its related records. Media cleanup is attempted first.
-  const readyToDelete = await env.DB.prepare(
-    "SELECT * FROM products WHERE published=0 AND expired_at IS NOT NULL AND expired_at <= datetime('now','-48 hours') LIMIT 100"
-  ).all();
-  for (const product of readyToDelete.results || []) {
     try { await deleteExpiredProductMedia(env, product); }
-    catch (error) { console.error("Final expired product media cleanup failed:", error); }
+    catch (error) { console.error("Expired product media cleanup failed:", product.id, error); }
     await env.DB.prepare("DELETE FROM products WHERE id=?").bind(product.id).run();
   }
-  return (newlyExpired.results || []).length + (readyToDelete.results || []).length;
+  return rows.length;
 }
 async function handleRaiseProduct(request, env, id) {
   await cleanupExpiredProducts(env);
@@ -1028,6 +1040,7 @@ async function handleIntegrationProduct(request, env) {
     if (value && !image) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
     images.push(image);
   }
+  if (!adminRow && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
@@ -1056,6 +1069,26 @@ async function handleIntegrationProduct(request, env) {
   return json({ ok: true, product: productPublic(productRow) }, 201);
 }
 
+
+async function handleIntegrationMedia(request, env) {
+  const authorization = request.headers.get("Authorization") || "";
+  const match = authorization.match(/^Bearer (ss_live_[a-f0-9]{64})$/i);
+  if (!match) return json({ ok: false, error: "A valid API key is required." }, 401);
+  const digest = await hashApiKey(match[1]);
+  const owner = await env.DB.prepare("SELECT u.id,u.email FROM user_api_keys k JOIN users u ON u.id=k.user_id WHERE k.key_hash=? AND k.revoked_at IS NULL AND u.is_banned=0 LIMIT 1").bind(digest).first();
+  if (!owner) return json({ ok: false, error: "Invalid or revoked API key." }, 401);
+  const adminRow = owner.email ? await env.DB.prepare("SELECT email FROM admin_allowlist WHERE email=? LIMIT 1").bind(clean(owner.email,320).toLowerCase()).first() : null;
+  const promoter = await approvedPromoter(env, owner.id);
+  if (!adminRow && !promoter) return json({ ok: false, error: "An approved promoter account is required." }, 403);
+  if (!(request.headers.get("Content-Type") || "").startsWith("multipart/form-data")) return json({ ok: false, error: "Expected multipart/form-data." }, 400);
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof File) || !String(file.type || "").startsWith("image/")) return json({ ok: false, error: "Send an image file." }, 400);
+  if (file.size <= 0 || file.size > 15 * 1024 * 1024) return json({ ok: false, error: "Image must be between 1 byte and 15 MB." }, 413);
+  const fileName = "products/" + Date.now() + "-" + crypto.randomUUID() + "." + safeExtension(file.name, file.type);
+  await b2Upload(env, fileName, new Uint8Array(await file.arrayBuffer()), file.type || "image/jpeg");
+  return json({ ok: true, url: b2MediaUrl(request, fileName), path: fileName, type: "image" }, 201);
+}
 
 async function handleIntegrationProductById(request, env, productId) {
   const authorization = request.headers.get("Authorization") || "";
@@ -1117,6 +1150,7 @@ async function handleIntegrationProductById(request, env, productId) {
     images.push(value === undefined ? (existing[`image${i}_url`] || "") : (value ? validHttpUrl(clean(value, 3000)) : ""));
     if (value && !images[i - 1]) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
   }
+  if (!admin && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
   } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
@@ -1146,6 +1180,7 @@ async function handleCreateProduct(request, env) {
   if ((body.affiliate_url || body.affiliate_link || body.product_url) && !affiliateUrl) return json({ ok: false, error: "Shopping link must be a valid http or https URL" }, 400);
   const images = [];
   for (let i = 1; i <= 5; i++) images.push(validHttpUrl(clean(body[`image${i}_url`], 3000)));
+  if (!admin && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
   } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
@@ -1531,7 +1566,7 @@ async function handleSettings(request, env) {
 async function handleMyNotices(request, env) {
   const user = await requireUser(request, env);
   if (!user) return json({ ok: false, error: "Sign in required" }, 401);
-  const rows = await env.DB.prepare("SELECT id,title,body,created_at FROM login_notices WHERE user_id=? AND title IN (?,?) ORDER BY id DESC LIMIT 30").bind(user.id,"Welcome to Shopper's Suggestions","New sign-in").all();
+  const rows = await env.DB.prepare("SELECT id,title,body,created_at FROM login_notices n WHERE user_id=? AND title IN (?,?) AND NOT EXISTS (SELECT 1 FROM notice_dismissals d WHERE d.user_id=? AND d.notice_id=n.id) ORDER BY id DESC LIMIT 30").bind(user.id,"Welcome to Shopper's Suggestions","New sign-in",user.id).all();
   return json({ ok: true, notices: rows.results || [] });
 }
 async function handleMarkAnnouncementsRead(request, env) {
@@ -1540,6 +1575,26 @@ async function handleMarkAnnouncementsRead(request, env) {
   await env.DB.prepare("INSERT OR IGNORE INTO announcement_reads (user_id,announcement_id) SELECT ?,id FROM announcements WHERE created_at >= datetime('now','-3 days') AND created_at >= ?").bind(user.id,user.created_at || "1970-01-01 00:00:00").run();
   await env.DB.prepare("INSERT OR IGNORE INTO notice_reads (user_id,notice_id) SELECT ?,id FROM login_notices WHERE user_id=? AND title IN (?,?)").bind(user.id,user.id,"Welcome to Shopper's Suggestions","New sign-in").run();
   return json({ ok: true, unread_count: 0 });
+}
+async function handleClearMail(request, env) {
+  const user = await requireUser(request, env);
+  if (!user) return json({ ok: false, error: "Sign in required" }, 401);
+  await env.DB.prepare("INSERT OR IGNORE INTO announcement_dismissals (user_id,announcement_id) SELECT ?,id FROM announcements WHERE created_at >= datetime('now','-3 days') AND created_at >= ?").bind(user.id, user.created_at || "1970-01-01 00:00:00").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO notice_dismissals (user_id,notice_id) SELECT ?,id FROM login_notices WHERE user_id=? AND title IN (?,?)").bind(user.id,user.id,"Welcome to Shopper's Suggestions","New sign-in").run();
+  return json({ ok: true, cleared: true });
+}
+async function handleAdminAnnouncements(request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ ok: false, error: "Administrator access required" }, 403);
+  const rows = await env.DB.prepare("SELECT id,title,body,created_at FROM announcements ORDER BY id DESC LIMIT 30").all();
+  return json({ ok: true, announcements: rows.results || [] });
+}
+async function handleAdminAnnouncementDelete(request, env, id) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ ok: false, error: "Administrator access required" }, 403);
+  const result = await env.DB.prepare("DELETE FROM announcements WHERE id=?").bind(id).run();
+  if (!result.meta?.changes) return json({ ok: false, error: "Announcement not found." }, 404);
+  return json({ ok: true, deleted: Number(id) });
 }
 async function requireAdmin(request, env) {
   const admin = await adminUser(request, env);
@@ -1664,7 +1719,7 @@ async function handleAnnouncements(request, env) {
     const user = await currentUser(request, env);
     await env.DB.prepare("DELETE FROM announcements WHERE created_at < datetime('now','-3 days')").run();
     const result = user
-      ? await env.DB.prepare("SELECT id,title,body,created_at FROM announcements WHERE created_at >= datetime('now','-3 days') AND created_at >= ? ORDER BY id DESC LIMIT 100").bind(user.created_at || "1970-01-01 00:00:00").all()
+      ? await env.DB.prepare("SELECT id,title,body,created_at FROM announcements a WHERE created_at >= datetime('now','-3 days') AND created_at >= ? AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.user_id=? AND d.announcement_id=a.id) ORDER BY id DESC LIMIT 100").bind(user.created_at || "1970-01-01 00:00:00", user.id).all()
       : { results: [] };
     let unreadCount = 0;
     if (user) {
@@ -1935,8 +1990,12 @@ export default {
       if (path === "/api/admin/users" && request.method === "GET") return handleAdminUsers(request, env);
       if (path === "/api/admin/promoters" && ["GET","POST"].includes(request.method)) return handleAdminPromoters(request, env);
       if (path === "/api/admin/announcements" && request.method === "POST") return handleAnnouncements(request, env);
+      if (path === "/api/admin/announcements" && request.method === "GET") return handleAdminAnnouncements(request, env);
+      const adminAnnouncementDelete = path.match(/^\/api\/admin\/announcements\/(\d+)$/);
+      if (adminAnnouncementDelete && request.method === "DELETE") return handleAdminAnnouncementDelete(request, env, adminAnnouncementDelete[1]);
       if (path === "/api/announcements" && request.method === "GET") return handleAnnouncements(request, env);
       if (path === "/api/announcements/read" && request.method === "POST") return handleMarkAnnouncementsRead(request, env);
+      if (path === "/api/announcements/clear" && request.method === "POST") return handleClearMail(request, env);
       if (path === "/api/notices" && request.method === "GET") return handleMyNotices(request, env);
       if (path === "/api/users/search" && request.method === "GET") return handleUserSearch(request, env);
       const publicProfileMatch = path.match(/^\/api\/users\/(\d+)$/);
@@ -1963,6 +2022,7 @@ export default {
       const clickMatch = path.match(/^\/go\/product\/(\d+)$/);
       if (clickMatch && request.method === "GET") return handleTrackClick(request, env, clickMatch[1]);
       if (path === "/api/my/api-key" && ["GET", "POST", "DELETE"].includes(request.method)) return handleMyApiKey(request, env);
+      if (path === "/api/integrations/media" && request.method === "POST") return handleIntegrationMedia(request, env);
       if (path === "/api/integrations/products" && ["GET", "POST"].includes(request.method)) return handleIntegrationProduct(request, env);
       const integrationProductMatch = path.match(/^\/api\/integrations\/products\/(\d+)$/);
       if (integrationProductMatch && ["PUT", "PATCH", "DELETE"].includes(request.method)) return handleIntegrationProductById(request, env, Number(integrationProductMatch[1]));
