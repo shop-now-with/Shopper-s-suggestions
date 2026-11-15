@@ -2899,9 +2899,7 @@ async function handleTelegramUpdate(update, env) {
 
   if (s.step === "confirm" && command === "publish") {
     try {
-      const created = s.data?.mode === "promoter"
-        ? await createPromoterProductFromTelegramSession(env, chatId, userId)
-        : await createProductFromTelegramSession(env, chatId);
+      const created = await createPromoterProductFromTelegramSession(env, chatId, userId);
       const delivery = created.telegramResult || {};
       const deliveryLine = Number(delivery.sent || 0) > 0
         ? `📣 Delivered to ${delivery.sent}/${delivery.total || delivery.sent} Telegram group(s)/channel(s).`
