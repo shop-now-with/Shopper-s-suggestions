@@ -1303,17 +1303,32 @@ async function telegramB2DeleteByName(env, fileName) {
     if (!deleted.ok) throw new Error("Secure image deletion failed (" + deleted.status + ").");
   }
 }
+function safeTelegramImageUrl(value) {
+  let url;
+  try { url = new URL(value); } catch { return false; }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+  if (!host || host.includes(":") || /^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(host) || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (/^(0|10|127|169\\.254|192\\.168|172\\.(1[6-9]|2\\d|3[01]))\\./.test(host)) return false;
+  return true;
+}
 async function importTelegramImageToB2(env, suppliedUrl) {
   const value = cleanText(suppliedUrl, 3000);
   if (!value) return "";
   let url;
   try { url = new URL(value); } catch { throw new Error("Image URL is invalid."); }
-  const host = url.hostname.toLowerCase();
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("Image URL must use http or https.");
-  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal") || host.startsWith("10.") || host.startsWith("127.") || host.startsWith("192.168.") || host.startsWith("169.254.") || host.startsWith("172.16.") || host.startsWith("172.17.") || host.startsWith("172.18.") || host.startsWith("172.19.") || host.startsWith("172.2") || host.startsWith("172.30.") || host.startsWith("172.31.")) throw new Error("Image URL must be publicly accessible.");
-  if (host === new URL(SITE_URL).hostname && url.pathname.startsWith("/media-b2/")) return url.href;
-  const response = await fetch(url.href, { redirect: "follow" });
-  if (!response.ok) throw new Error("Could not download the image URL.");
+  if (!safeTelegramImageUrl(url.href)) throw new Error("Image URL must point to a public HTTP or HTTPS image.");
+  if (url.hostname === new URL(SITE_URL).hostname && url.pathname.startsWith("/media-b2/")) return url.href;
+  let response = null, current = url.href;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (!safeTelegramImageUrl(current)) throw new Error("Image URL redirects to a blocked address.");
+    response = await fetch(current, { redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    const location = response.headers.get("Location");
+    if (!location) throw new Error("Image host returned an invalid redirect.");
+    current = new URL(location, current).href;
+  }
+  if (!response || !response.ok) throw new Error("Could not download the image URL.");
   const contentType = (response.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
   if (!contentType.startsWith("image/")) throw new Error("The supplied URL did not return an image.");
   if (Number(response.headers.get("Content-Length") || 0) > 15 * 1024 * 1024) throw new Error("Image must be 15 MB or smaller.");
@@ -1324,8 +1339,13 @@ async function importTelegramImageToB2(env, suppliedUrl) {
   await telegramB2Upload(env, fileName, bytes, contentType);
   return telegramB2MediaUrl(fileName);
 }
-async function cleanupTelegramProductImage(env, imageUrl) {
+async function cleanupTelegramProductImage(env, imageUrl, productId) {
   if (!imageUrl) return;
+  if (productId != null) {
+    const refs = await env.DB.prepare("SELECT id FROM products WHERE id<>? AND (image1_url=? OR image2_url=? OR image3_url=? OR image4_url=? OR image5_url=?) LIMIT 1")
+      .bind(productId, imageUrl, imageUrl, imageUrl, imageUrl, imageUrl).first();
+    if (refs) return;
+  }
   try {
     const url = new URL(imageUrl);
     const prefix = "/media-b2/";
@@ -1576,7 +1596,7 @@ async function updateWebsiteProduct(request, env, id) {
   const newMedia = new Set(productImages(updated));
   for (const url of oldMedia) {
     if (url && !newMedia.has(url)) {
-      try { await cleanupTelegramProductImage(env, url); } catch (error) { console.error("Could not clean replaced product image:", error); }
+      try { await cleanupTelegramProductImage(env, url, id); } catch (error) { console.error("Could not clean replaced product image:", error); }
     }
   }
   return api({ ok: true, product: productPublic(updated) }, request);
@@ -1586,7 +1606,7 @@ async function deleteWebsiteProduct(request, env, id) {
   const product = await getProduct(env, id);
   if (!product) return api({ ok: false, error: "Product not found." }, request, 404);
   try {
-    for (const url of productImages(product)) await cleanupTelegramProductImage(env, url);
+    for (const url of productImages(product)) await cleanupTelegramProductImage(env, url, id);
     if (product.video_url) await githubDeleteByRawUrl(env, product.video_url);
   } catch (error) {
     console.error("Product media cleanup failed; product retained:", id, error);
