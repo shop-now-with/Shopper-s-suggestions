@@ -1048,10 +1048,6 @@ async function handleIntegrationProduct(request, env) {
     const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE uploader_id=? AND published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(owner.id).first();
     if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
-  if (!isAdmin && images.some(url=>url&&url.includes("/media-b2/"))) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
-    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
-  }
   const permanent = isAdmin && isTrue(body.permanent);
   const result = await env.DB.prepare(`INSERT INTO products (title,description,affiliate_url,category,image1_url,image2_url,image3_url,image4_url,image5_url,video_url,published,featured,price,original_price,uploader_id,expires_at,listing_duration_hours) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?=1 THEN NULL ELSE datetime('now','+72 hours') END,?)`).bind(title,description,affiliateUrl,category,...images,videoUrl,1,0,price,originalPrice,owner.id,permanent?1:0,permanent?0:72).run();
   const productId = Number(result?.meta?.last_row_id);
@@ -1194,11 +1190,6 @@ async function handleCreateProduct(request, env) {
     if (Number(active?.count||0)>=4) return json({ok:false,error:"You can have a maximum of 4 live listings."},409);
   }
   const permanent = !!admin && isTrue(body.permanent);
-  const hasUploadedImage = images.some(url=>url&&url.includes("/media-b2/"));
-  if (!admin && hasUploadedImage) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
-    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. You can still use direct image links."},409);
-  }
   if (uploaderId !== null) {
     const exists = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(uploaderId).first();
     if (!exists) return json({ ok: false, error: "Uploader account was not found" }, 400);
@@ -1301,10 +1292,6 @@ async function handleUploadMedia(request, env) {
   const file = form.get("file") || form.get("image") || form.get("media");
   if (!(file instanceof File)) return json({ ok: false, error: "No file received" }, 400);
   const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(file.name);
-  if (!admin && !isVideo) {
-    const slots = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE published=1 AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (image1_url LIKE ? OR image2_url LIKE ? OR image3_url LIKE ? OR image4_url LIKE ? OR image5_url LIKE ?)").bind("%/media%","%/media%","%/media%","%/media%","%/media%").first();
-    if (Number(slots?.count||0)>=25) return json({ok:false,error:"The 25 shared image-upload slots are full. Use direct image links instead."},409);
-  }
   const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
   if (file.size <= 0) return json({ ok: false, error: "Empty file" }, 400);
   if (file.size > maxSize) return json({ ok: false, error: isVideo ? "Video is too large. Maximum 100 MB." : "Image is too large. Maximum 15 MB." }, 413);
