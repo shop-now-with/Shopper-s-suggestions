@@ -167,7 +167,7 @@ async function hashText(value) {
 
 async function promoterKeyCryptoKey(env) {
   const secret = cleanText(env.TELEGRAM_API_KEY_ENCRYPTION_SECRET, 500);
-  if (!secret) throw new Error("Bot security is not configured yet. Please contact Shopper's Suggestions support.");
+  if (!secret) throw new Error("Account connection is temporarily unavailable. Please try again later.");
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
@@ -1612,14 +1612,14 @@ async function handleTelegramCallback(update, env) {
     if (data === "adsrun:free") {
       await env.DB.prepare("UPDATE telegram_ads_accounts SET plan='free',paid_until=NULL,updated_at=? WHERE telegram_user_id=?").bind(nowSql(),String(userId)).run();
       const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_ads_verified_chats WHERE telegram_user_id=? AND active=1").bind(String(userId)).first();
-      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\\n\\nVerify 3 Telegram groups or channels where you are an admin and this bot can post. Use /adsverify inside each group, or /adsverify @ChannelUsername here.\\n\\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\\n🔁 Every 7 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\\n\\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
+      await telegramApi(env,"sendMessage",{chat_id:chatId,text:"🆓 <b>Free Plan</b>\n\nVerify 3 Telegram groups or channels where you are an admin and this bot can post. Use /adsverify inside each group, or /adsverify @ChannelUsername here.\n\n📣 Ads every 60 minutes. Each product gets 10 promotions, then a 40-minute cooldown.\n🔁 Every 7 days, add 3 more groups. All previously verified groups stay active and continue receiving ads.\n\nVerified groups: "+Number(count?.total||0)+".",parse_mode:"HTML"});
     } else {
       const qr=await getAdsQr(env);
       if(!qr){await telegramApi(env,"sendMessage",{chat_id:chatId,text:"⭐ Paid Plan QR is not configured yet. Please try again later."});return;}
       const session=await getTelegramSession(env,chatId,userId);
       session.step="ads_payment_utr";session.data={};
       await saveTelegramSession(env,session);
-      await telegramApi(env,"sendPhoto",{chat_id:chatId,photo:qr,caption:"⭐ <b>Paid Plan — ₹150 / 30 days</b>\\n\\nScan this QR to pay. After payment, send your UTR/reference number here. Your subscription starts only after admin approval.",parse_mode:"HTML"});
+      await telegramApi(env,"sendPhoto",{chat_id:chatId,photo:qr,caption:"⭐ <b>Paid Plan — ₹150 / 30 days</b>\n\nScan this QR to pay. After payment, send your UTR/reference number here. Your subscription starts only after admin approval.",parse_mode:"HTML"});
     }
     return;
   }
@@ -2799,16 +2799,15 @@ async function handleTelegramUpdate(update, env) {
 
   if (s.step === "images") {
     if (command === "skip" || command === "done") {
-      s.data.video_url = "";
       s.step = "confirm";
       await saveTelegramSession(env, s);
       await telegramApi(env, "sendMessage", {
         chat_id: chatId,
         text:
-          `✅ <b>Ready to publish</b>\\n\\n` +
-          `🛍️ ${escapeTelegramHtml(s.data.title)}\\n` +
-          `📂 ${escapeTelegramHtml(s.data.category)}\\n` +
-          `🖼️ ${(s.data.images || []).length} image(s)\\n\\n` +
+          `✅ <b>Ready to publish</b>\n\n` +
+          `🛍️ ${escapeTelegramHtml(s.data.title)}\n` +
+          `📂 ${escapeTelegramHtml(s.data.category)}\n` +
+          `🖼️ ${(s.data.images || []).length} image(s)\n\n` +
           `Type <code>publish</code> or use <code>/cancel</code>.`,
         parse_mode: "HTML"
       });
@@ -2846,7 +2845,7 @@ async function handleTelegramUpdate(update, env) {
       }
       try {
         const file = await downloadTelegramFile(env, incomingVideo.file_id, "video");
-        if (file.bytes.length > 100 * 1024 * 1024) throw new Error("That video is larger than 100 MB. Please send a smaller video.");
+        if (file.bytes.length > 20 * 1024 * 1024) throw new Error("Telegram bot downloads are limited to 20 MB per video. Upload larger videos through the website.");
         const link = await getPromoterTelegramLink(env, userId);
         if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Reconnect your Shopper's Suggestions account with /connect.");
         const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
@@ -2888,12 +2887,11 @@ async function handleTelegramUpdate(update, env) {
 
   // Older drafts may still be on the retired video step. Move them to confirmation without requesting video.
   if (s.step === "video") {
-    s.data.video_url = "";
-    s.step = "confirm";
+    s.step = "images";
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "Video uploads are no longer supported. Your product is ready without a video. Type publish to continue, or /cancel."
+      text: "Your draft is ready for product media. Send up to 2 images and one video, or type done to review."
     });
     return;
   }
