@@ -1145,8 +1145,8 @@ async function handleIntegrationProductById(request, env, productId) {
     images.push(value === undefined ? (existing[`image${i}_url`] || "") : (value ? validHttpUrl(clean(value, 3000)) : ""));
     if (value && !images[i - 1]) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
   }
-  if (!admin && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
-  if (!adminRow && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
+  const imageFieldsChanged = Array.from({ length: 5 }, (_, index) => Object.prototype.hasOwnProperty.call(body, `image${index + 1}_url`)).some(Boolean);
+  if (!adminRow && imageFieldsChanged && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
   } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
@@ -1226,6 +1226,8 @@ async function handleUpdateProduct(request, env, id) {
   if (rawAffiliate !== undefined && rawAffiliate && !affiliateUrl) return json({ ok: false, error: "Shopping link must be a valid http or https URL" }, 400);
   const images = [];
   for (let i = 1; i <= 5; i++) images.push(body[`image${i}_url`] === undefined ? (existing[`image${i}_url`] || "") : validHttpUrl(clean(body[`image${i}_url`], 3000)));
+  const imageFieldsChanged = Array.from({ length: 5 }, (_, index) => Object.prototype.hasOwnProperty.call(body, `image${index + 1}_url`)).some(Boolean);
+  if (!admin && imageFieldsChanged && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
   } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
