@@ -2807,7 +2807,8 @@ async function handleTelegramUpdate(update, env) {
           `✅ <b>Ready to publish</b>\n\n` +
           `🛍️ ${escapeTelegramHtml(s.data.title)}\n` +
           `📂 ${escapeTelegramHtml(s.data.category)}\n` +
-          `🖼️ ${(s.data.images || []).length} image(s)\n\n` +
+          `🖼️ ${(s.data.images || []).length}/2 image(s)\n` +
+          `🎥 Video: ${s.data.video_url ? "added" : "not added"}\n\n` +
           `Type <code>publish</code> or use <code>/cancel</code>.`,
         parse_mode: "HTML"
       });
