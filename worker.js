@@ -1709,8 +1709,8 @@ async function handleAnnouncements(request, env) {
       : { results: [] };
     let unreadCount = 0;
     if (user) {
-      const globalUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM announcements a WHERE a.created_at >= datetime('now','-3 days') AND a.created_at >= ? AND NOT EXISTS (SELECT 1 FROM announcement_reads r WHERE r.user_id=? AND r.announcement_id=a.id)").bind(user.created_at || "1970-01-01 00:00:00",user.id).first();
-      const noticeUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM login_notices n WHERE n.user_id=? AND n.title IN (?,?) AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.user_id=? AND r.notice_id=n.id)").bind(user.id,"Welcome to Shopper's Suggestions","New sign-in",user.id).first();
+      const globalUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM announcements a WHERE a.created_at >= datetime('now','-3 days') AND a.created_at >= ? AND NOT EXISTS (SELECT 1 FROM announcement_reads r WHERE r.user_id=? AND r.announcement_id=a.id) AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.user_id=? AND d.announcement_id=a.id)").bind(user.created_at || "1970-01-01 00:00:00",user.id,user.id).first();
+      const noticeUnread = await env.DB.prepare("SELECT COUNT(*) AS count FROM login_notices n WHERE n.user_id=? AND n.title IN (?,?) AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.user_id=? AND r.notice_id=n.id) AND NOT EXISTS (SELECT 1 FROM notice_dismissals d WHERE d.user_id=? AND d.notice_id=n.id)").bind(user.id,"Welcome to Shopper's Suggestions","New sign-in",user.id,user.id).first();
       unreadCount = Number(globalUnread?.count || 0) + Number(noticeUnread?.count || 0);
     }
     return json({ ok: true, announcements: result.results || [], unread_count: unreadCount });
