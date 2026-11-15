@@ -248,6 +248,21 @@ async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey, prom
   `).bind(String(telegramUserId), String(chatId), encrypted, apiKey.slice(0, 16), nextAccountId).run();
 }
 
+async function uploadTelegramImageToB2(env, apiKey, file) {
+  const form = new FormData();
+  form.append("file", new Blob([file.bytes], { type: file.type || "image/jpeg" }), file.filename || "telegram-image.jpg");
+  const response = await fetch("https://shopperssuggestions.online/api/integrations/media", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.ok || !data.url) {
+    throw new Error(data.error || data.diagnostic || `Image storage failed (HTTP ${response.status}).`);
+  }
+  return data.url;
+}
+
 async function createPromoterProductFromTelegramSession(env, chatId, telegramUserId) {
   const link = await getPromoterTelegramLink(env, telegramUserId);
   if (!link || String(link.chat_id) !== String(chatId)) {
@@ -288,7 +303,7 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
       affiliate_url: cleanText(d.affiliate_url, 2000),
       category: cleanText(d.category, 100)
     };
-    (Array.isArray(d.images) ? d.images : []).slice(0, 5).forEach((url, i) => {
+    (Array.isArray(d.images) ? d.images : []).slice(0, 2).forEach((url, i) => {
       body[`image${i + 1}_url`] = url;
     });
 
@@ -1150,7 +1165,7 @@ async function createProductFromTelegramSession(env, chatId) {
   const title = cleanText(d.title, 300);
   const description = cleanText(d.description, 5000);
   const affiliate = cleanText(d.affiliate_url, 2000);
-  const images = Array.isArray(d.images) ? d.images.filter(Boolean).slice(0, 5) : [];
+  const images = Array.isArray(d.images) ? d.images.filter(Boolean).slice(0, 2) : [];
   const video = cleanText(d.video_url, 2000);
 
   if (!title || !affiliate || !category) {
@@ -1619,7 +1634,7 @@ async function handleTelegramCallback(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: `Category selected: ${category}\n\nSend up to 5 direct image URLs (https://...). Type done when finished, or skip to continue without images.`
+      text: `Category selected: ${category}\n\nSend up to 2 images. You can upload a photo or send a direct image URL. Type done to continue, or skip to publish without images.`
     });
   }
 }
@@ -2762,7 +2777,7 @@ async function handleTelegramUpdate(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "Category selected: " + category + "\n\nSend up to 5 direct image URLs (https://...). Type done when finished, or skip to continue without images."
+      text: "Category selected: " + category + "\n\nSend up to 2 images. You can upload a photo or send a direct image URL. Type done to continue, or skip to publish without images."
     });
     return;
   }
@@ -2787,18 +2802,21 @@ async function handleTelegramUpdate(update, env) {
 
     if (message.photo?.length) {
       const currentImages = Array.isArray(s.data.images) ? s.data.images : [];
-      if (currentImages.length >= 5) {
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You already have 5 images. Type done to review and publish." });
+      if (currentImages.length >= 2) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You already have 2 images. Type done to review and publish." });
         return;
       }
       try {
         const photo = message.photo[message.photo.length - 1];
         const file = await downloadTelegramFile(env, photo.file_id, "image");
         if (file.bytes.length > 15 * 1024 * 1024) throw new Error("That image is larger than 15 MB. Please send a smaller image.");
-        const uploaded = await githubUpload(env, file.bytes, file.filename, file.type);
-        s.data.images = [...currentImages, uploaded.url];
+        const link = await getPromoterTelegramLink(env, userId);
+        if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Reconnect your Shopper's Suggestions account with /connect.");
+        const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+        const imageUrl = await uploadTelegramImageToB2(env, apiKey, file);
+        s.data.images = [...currentImages, imageUrl];
         await saveTelegramSession(env, s);
-        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded and saved (" + s.data.images.length + "/5). Send another photo or direct image URL, or type done to review." });
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded to secure storage (" + s.data.images.length + "/2). Send one more photo or image URL, or type done to review." });
       } catch (error) {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Image upload failed: " + escapeTelegramHtml(error.message || "Please try another image."), parse_mode: "HTML" });
       }
@@ -2819,15 +2837,15 @@ async function handleTelegramUpdate(update, env) {
     }
 
     s.data.images = Array.isArray(s.data.images) ? s.data.images : [];
-    if (s.data.images.length >= 5) {
-      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🖼️ You already added 5 images. Type done." });
+    if (s.data.images.length >= 2) {
+      await telegramApi(env, "sendMessage", { chat_id: chatId, text: "🖼️ You already added 2 images. Type done." });
       return;
     }
     s.data.images.push(imageUrl);
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: "✅ Image link " + s.data.images.length + "/5 saved. Send another direct image URL or type done to review."
+      text: "✅ Image link " + s.data.images.length + "/2 saved. Send another direct image URL or type done to review."
     });
     return;
   }
