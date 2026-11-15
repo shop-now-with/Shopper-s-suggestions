@@ -515,15 +515,17 @@ function b2MediaUrl(request, fileName) {
 }
 async function b2Authorize(env) {
   if (!env.B2_KEY_ID || !env.B2_APPLICATION_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) throw new Error("Backblaze B2 storage is not configured. Check the four B2 Worker secrets.");
-  const response = await fetch("https://api.backblazeb2.com/b2api/v3/b2_authorize_account", {
+  const response = await fetch("https://api.backblazeb2.com/b2api/v4/b2_authorize_account", {
     headers: { Authorization: "Basic " + btoa(env.B2_KEY_ID + ":" + env.B2_APPLICATION_KEY) }
   });
   if (!response.ok) throw new Error("Backblaze authorization failed: " + response.status);
-  return response.json();
+  const data = await response.json();
+  const storage = data.apiInfo?.storageApi || {};
+  return { ...data, apiUrl: storage.apiUrl || data.apiUrl, downloadUrl: storage.downloadUrl || data.downloadUrl };
 }
 async function b2Upload(env, fileName, bytes, contentType) {
   const auth = await b2Authorize(env);
-  const urlResponse = await fetch(auth.apiUrl + "/b2api/v3/b2_get_upload_url", {
+  const urlResponse = await fetch(auth.apiUrl + "/b2api/v4/b2_get_upload_url", {
     method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
     body: JSON.stringify({ bucketId: env.B2_BUCKET_ID })
   });
@@ -594,7 +596,7 @@ async function handleB2Media(request, env, encodedName) {
 }
 async function b2DeleteByName(env, fileName) {
   const auth = await b2Authorize(env);
-  const listedResponse = await fetch(auth.apiUrl + "/b2api/v3/b2_list_file_names", {
+  const listedResponse = await fetch(auth.apiUrl + "/b2api/v4/b2_list_file_names", {
     method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
     body: JSON.stringify({ bucketId: env.B2_BUCKET_ID, startFileName: fileName, maxFileCount: 100 })
   });
@@ -602,7 +604,7 @@ async function b2DeleteByName(env, fileName) {
   const listed = await listedResponse.json();
   for (const file of listed.files || []) {
     if (file.fileName !== fileName) continue;
-    const deleted = await fetch(auth.apiUrl + "/b2api/v3/b2_delete_file_version", {
+    const deleted = await fetch(auth.apiUrl + "/b2api/v4/b2_delete_file_version", {
       method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
       body: JSON.stringify({ fileName: file.fileName, fileId: file.fileId })
     });
