@@ -490,10 +490,10 @@ function githubRawUrl(env, path) {
   return `https://raw.githubusercontent.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH || "main"}/${path}`;
 }
 async function githubGet(env, path) {
-  if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO) throw new Error("GitHub media storage is not configured.");
+  if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO) throw new Error("Media service is not configured.");
   const url = `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/contents/${path}?ref=${encodeURIComponent(env.GITHUB_BRANCH || "main")}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "Shopper-Suggestions" } });
-  if (!response.ok) throw new Error(`GitHub GET failed: ${response.status}`);
+  if (!response.ok) throw new Error(`Media service request failed: ${response.status}`);
   return response.json();
 }
 function bytesToBase64(bytes) {
@@ -502,7 +502,7 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 async function githubUpload(env, path, bytes, contentType, message) {
-  if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO) throw new Error("GitHub media storage is not configured.");
+  if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO) throw new Error("Media service is not configured.");
   const url = `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/contents/${path}`;
   let sha = null;
   try { sha = (await githubGet(env, path)).sha; } catch (_) {}
@@ -511,7 +511,7 @@ async function githubUpload(env, path, bytes, contentType, message) {
     headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "User-Agent": "Shopper-Suggestions" },
     body: JSON.stringify({ message, content: bytesToBase64(bytes), branch: env.GITHUB_BRANCH || "main", ...(sha ? { sha } : {}) })
   });
-  if (!response.ok) throw new Error(`GitHub upload failed: ${response.status} ${(await response.text()).slice(0, 300)}`);
+  if (!response.ok) throw new Error(`Media service upload failed: ${response.status}`);
   return { path, url: githubRawUrl(env, path), contentType };
 }
 async function githubDelete(env, path, message) {
@@ -521,7 +521,7 @@ async function githubDelete(env, path, message) {
     headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "User-Agent": "Shopper-Suggestions" },
     body: JSON.stringify({ message, sha: existing.sha, branch: env.GITHUB_BRANCH || "main" })
   });
-  if (!response.ok) throw new Error(`GitHub delete failed: ${response.status}`);
+  if (!response.ok) throw new Error(`Media service delete failed: ${response.status}`);
   return true;
 }
 
@@ -530,11 +530,11 @@ function b2MediaUrl(request, fileName) {
   return new URL("/media-b2/" + encodeURIComponent(fileName), request.url).toString();
 }
 async function b2Authorize(env) {
-  if (!env.B2_KEY_ID || !env.B2_APPLICATION_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) throw new Error("Backblaze B2 storage is not configured. Check the four B2 Worker secrets.");
+  if (!env.B2_KEY_ID || !env.B2_APPLICATION_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) throw new Error("Media service is not configured. Please try again later.");
   const response = await fetch("https://api.backblazeb2.com/b2api/v4/b2_authorize_account", {
     headers: { Authorization: "Basic " + btoa(env.B2_KEY_ID + ":" + env.B2_APPLICATION_KEY) }
   });
-  if (!response.ok) throw new Error("Backblaze authorization failed: " + response.status);
+  if (!response.ok) throw new Error("Media service authorization failed: " + response.status);
   const data = await response.json();
   const storage = data.apiInfo?.storageApi || {};
   return { ...data, apiUrl: storage.apiUrl || data.apiUrl, downloadUrl: storage.downloadUrl || data.downloadUrl };
@@ -545,7 +545,7 @@ async function b2Upload(env, fileName, bytes, contentType) {
     method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
     body: JSON.stringify({ bucketId: env.B2_BUCKET_ID })
   });
-  if (!urlResponse.ok) throw new Error("Backblaze upload URL request failed: " + urlResponse.status);
+  if (!urlResponse.ok) throw new Error("Media service upload request failed: " + urlResponse.status);
   const uploadInfo = await urlResponse.json();
   const digest = await crypto.subtle.digest("SHA-1", bytes);
   const sha1 = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
@@ -554,7 +554,7 @@ async function b2Upload(env, fileName, bytes, contentType) {
     headers: { Authorization: uploadInfo.authorizationToken, "X-Bz-File-Name": encodeURIComponent(fileName), "Content-Type": contentType, "X-Bz-Content-Sha1": sha1 },
     body: bytes
   });
-  if (!uploaded.ok) throw new Error("Backblaze file upload failed: " + uploaded.status + " " + (await uploaded.text()).slice(0, 200));
+  if (!uploaded.ok) throw new Error("Media service upload failed: " + uploaded.status);
   return { ...(await uploaded.json()), fileName };
 }
 function safeRemoteImageUrl(value) {
@@ -616,7 +616,7 @@ async function b2DeleteByName(env, fileName) {
     method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
     body: JSON.stringify({ bucketId: env.B2_BUCKET_ID, startFileName: fileName, maxFileCount: 100 })
   });
-  if (!listedResponse.ok) throw new Error("Backblaze file lookup failed: " + listedResponse.status);
+  if (!listedResponse.ok) throw new Error("Media service lookup failed: " + listedResponse.status);
   const listed = await listedResponse.json();
   for (const file of listed.files || []) {
     if (file.fileName !== fileName) continue;
@@ -624,7 +624,7 @@ async function b2DeleteByName(env, fileName) {
       method: "POST", headers: { Authorization: auth.authorizationToken, "Content-Type": "application/json" },
       body: JSON.stringify({ fileName: file.fileName, fileId: file.fileId })
     });
-    if (!deleted.ok) throw new Error("Backblaze delete failed: " + deleted.status);
+    if (!deleted.ok) throw new Error("Media service delete failed: " + deleted.status);
   }
 }
 async function deleteB2ImageUrl(env, imageUrl) {
@@ -1040,7 +1040,7 @@ async function handleIntegrationProduct(request, env) {
   if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
-  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: "Please try again later." }, 400); }
   const isAdmin = !!adminRow;
   if (!isAdmin) {
     const blockedUntil = await getPromoterUploadCooldown(env, owner.id);
@@ -1149,7 +1149,7 @@ async function handleIntegrationProductById(request, env, productId) {
   if (!adminRow && imageFieldsChanged && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
-  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: "Please try again later." }, 400); }
   await env.DB.prepare("UPDATE products SET title=?,description=?,affiliate_url=?,category=?,image1_url=?,image2_url=?,image3_url=?,image4_url=?,image5_url=?,video_url=?,price=?,original_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND uploader_id=?")
     .bind(title, description, affiliateUrl, category, ...images, videoUrl || "", price, originalPrice, productId, owner.id).run();
   for (const oldUrl of [existing.image1_url, existing.image2_url, existing.image3_url, existing.image4_url, existing.image5_url].filter(Boolean)) {
@@ -1185,7 +1185,7 @@ async function handleCreateProduct(request, env) {
   if (!admin && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
-  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: "Please try again later." }, 400); }
   
   const durationHours = 72;
   const uploaderId = admin ? numberOrNull(body.uploader_id ?? body.user_id) : Number(user.id);
@@ -1236,7 +1236,7 @@ async function handleUpdateProduct(request, env, id) {
   if (!admin && imageFieldsChanged && images.filter(Boolean).length > 2) return json({ ok: false, error: "Regular accounts can add up to 2 images per product." }, 400);
   try {
     for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
-  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: "Please try again later." }, 400); }
   const price = body.price === undefined ? existing.price : numberOrNull(body.price);
   const originalPrice = body.original_price === undefined && body.originalPrice === undefined && body.mrp === undefined ? existing.original_price : numberOrNull(body.original_price ?? body.originalPrice ?? body.mrp);
   if (!admin && (body.uploader_id !== undefined || body.user_id !== undefined)) return json({ok:false,error:"Only an administrator can change the listing owner"},403);
@@ -2084,11 +2084,7 @@ export default {
       return env.ASSETS.fetch(request);
     } catch (error) {
       console.error("SHOPPER'S SUGGESTIONS WORKER ERROR:", error);
-      // Temporary safe diagnostic: visit /api/health?debug=1 to reveal the error message.
-      // Remove this diagnostic after the root cause is fixed.
-      const debug = new URL(request.url).searchParams.get("debug") === "1";
-      const diagnostic = String(error?.message || error || "Unknown error").slice(0, 400);
-      return json({ ok: false, error: "Internal server error", ...(debug ? { diagnostic } : {}) }, 500);
+      return json({ ok: false, error: "Internal server error. Please try again later." }, 500);
     }
   }
 };
