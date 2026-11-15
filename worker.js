@@ -1006,6 +1006,9 @@ async function handleIntegrationProduct(request, env) {
     images.push(image);
   }
   if (body.video_url && !videoUrl) return json({ ok: false, error: "video_url must be a valid http or https URL" }, 400);
+  try {
+    for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
   const isAdmin = !!adminRow;
   if (!isAdmin) {
     const blockedUntil = await getPromoterUploadCooldown(env, owner.id);
@@ -1088,6 +1091,9 @@ async function handleIntegrationProductById(request, env, productId) {
     images.push(value === undefined ? (existing[`image${i}_url`] || "") : (value ? validHttpUrl(clean(value, 3000)) : ""));
     if (value && !images[i - 1]) return json({ ok: false, error: `image${i}_url must be a valid http or https URL` }, 400);
   }
+  try {
+    for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
   await env.DB.prepare("UPDATE products SET title=?,description=?,affiliate_url=?,category=?,image1_url=?,image2_url=?,image3_url=?,image4_url=?,image5_url=?,video_url=?,price=?,original_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND uploader_id=?")
     .bind(title, description, affiliateUrl, category, ...images, videoUrl || "", price, originalPrice, productId, owner.id).run();
   const updated = await env.DB.prepare(`${PRODUCT_SELECT} WHERE p.id=? AND p.uploader_id=?`).bind(productId, owner.id).first();
@@ -1114,6 +1120,9 @@ async function handleCreateProduct(request, env) {
   if ((body.affiliate_url || body.affiliate_link || body.product_url) && !affiliateUrl) return json({ ok: false, error: "Shopping link must be a valid http or https URL" }, 400);
   const images = [];
   for (let i = 1; i <= 5; i++) images.push(validHttpUrl(clean(body[`image${i}_url`], 3000)));
+  try {
+    for (let i = 0; i < images.length; i++) if (images[i]) images[i] = await importImageToB2(request, env, images[i]);
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
   
   const durationHours = 72;
   const uploaderId = admin ? numberOrNull(body.uploader_id ?? body.user_id) : Number(user.id);
@@ -1166,6 +1175,9 @@ async function handleUpdateProduct(request, env, id) {
   if (rawAffiliate !== undefined && rawAffiliate && !affiliateUrl) return json({ ok: false, error: "Shopping link must be a valid http or https URL" }, 400);
   const images = [];
   for (let i = 1; i <= 5; i++) images.push(body[`image${i}_url`] === undefined ? (existing[`image${i}_url`] || "") : validHttpUrl(clean(body[`image${i}_url`], 3000)));
+  try {
+    for (let i = 0; i < images.length; i++) if (images[i] && images[i] !== existing[`image${i + 1}_url`]) images[i] = await importImageToB2(request, env, images[i]);
+  } catch (error) { return json({ ok: false, error: "Image import failed", diagnostic: String(error?.message || error).slice(0, 250) }, 400); }
   const price = body.price === undefined ? existing.price : numberOrNull(body.price);
   const originalPrice = body.original_price === undefined && body.originalPrice === undefined && body.mrp === undefined ? existing.original_price : numberOrNull(body.original_price ?? body.originalPrice ?? body.mrp);
   if (!admin && (body.uploader_id !== undefined || body.user_id !== undefined)) return json({ok:false,error:"Only an administrator can change the listing owner"},403);
