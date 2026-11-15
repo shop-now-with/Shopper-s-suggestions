@@ -248,7 +248,7 @@ async function connectPromoterTelegram(env, chatId, telegramUserId, apiKey, prom
   `).bind(String(telegramUserId), String(chatId), encrypted, apiKey.slice(0, 16), nextAccountId).run();
 }
 
-async function uploadTelegramImageToB2(env, apiKey, file) {
+async function uploadTelegramMediaToWebsite(env, apiKey, file) {
   const form = new FormData();
   form.append("file", new Blob([file.bytes], { type: file.type || "image/jpeg" }), file.filename || "telegram-image.jpg");
   const response = await fetch("https://shopperssuggestions.online/api/integrations/media", {
@@ -258,7 +258,7 @@ async function uploadTelegramImageToB2(env, apiKey, file) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok || !data.url) {
-    throw new Error(data.error || data.diagnostic || `Image storage failed (HTTP ${response.status}).`);
+    throw new Error(data.error || data.diagnostic || `Media upload failed (HTTP ${response.status}).`);
   }
   return data.url;
 }
@@ -301,7 +301,8 @@ async function createPromoterProductFromTelegramSession(env, chatId, telegramUse
       title: cleanText(d.title, 300),
       description: cleanText(d.description, 10000),
       affiliate_url: cleanText(d.affiliate_url, 2000),
-      category: cleanText(d.category, 100)
+      category: cleanText(d.category, 100),
+      video_url: cleanText(d.video_url, 2000)
     };
     (Array.isArray(d.images) ? d.images : []).slice(0, 2).forEach((url, i) => {
       body[`image${i + 1}_url`] = url;
@@ -583,29 +584,43 @@ async function sendProductMediaToTelegram(env, chatId, product) {
   const images = productImages(product);
   const caption = telegramCaption(product);
   const markup = productButton(product);
-  let deliveredImage = false;
+  let deliveredMedia = false;
 
-  // Broken or non-direct image URLs must not block delivery of the product itself.
-  for (const image of images) {
+  for (const photo of images) {
     try {
-      const payload = { chat_id: chatId, photo: image };
-      if (!deliveredImage) {
+      const payload = { chat_id: chatId, photo };
+      if (!deliveredMedia) {
         payload.caption = caption;
         payload.parse_mode = "HTML";
         payload.reply_markup = markup;
       }
       await telegramSendWithRetry(env, "sendPhoto", payload);
-      deliveredImage = true;
+      deliveredMedia = true;
     } catch (error) {
       console.error("Product image delivery failed; trying remaining images", {
-        chat_id: String(chatId),
-        product_id: String(product?.id || ""),
-        error: String(error?.message || error)
+        chat_id: String(chatId), product_id: String(product?.id || ""), error: String(error?.message || error)
       });
     }
   }
 
-  if (!deliveredImage) {
+  if (product.video_url) {
+    try {
+      const payload = { chat_id: chatId, video: product.video_url };
+      if (!deliveredMedia) {
+        payload.caption = caption;
+        payload.parse_mode = "HTML";
+        payload.reply_markup = markup;
+      }
+      await telegramSendWithRetry(env, "sendVideo", payload);
+      deliveredMedia = true;
+    } catch (error) {
+      console.error("Product video delivery failed", {
+        chat_id: String(chatId), product_id: String(product?.id || ""), error: String(error?.message || error)
+      });
+    }
+  }
+
+  if (!deliveredMedia) {
     await telegramSendWithRetry(env, "sendMessage", {
       chat_id: chatId,
       text: "✨ <b>CHECK IT OUT!</b> ✨\n\n" + caption,
@@ -1634,7 +1649,7 @@ async function handleTelegramCallback(update, env) {
     await saveTelegramSession(env, s);
     await telegramApi(env, "sendMessage", {
       chat_id: chatId,
-      text: `Category selected: ${category}\n\nSend up to 2 images. You can upload a photo or send a direct image URL. Type done to continue, or skip to publish without images.`
+      text: `Category selected: ${category}\n\nSend up to 2 images (photo or direct image URL). You can also send one video up to 100 MB. Type done when finished, or skip to publish without media.`
     });
   }
 }
@@ -2813,12 +2828,33 @@ async function handleTelegramUpdate(update, env) {
         const link = await getPromoterTelegramLink(env, userId);
         if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Reconnect your Shopper's Suggestions account with /connect.");
         const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
-        const imageUrl = await uploadTelegramImageToB2(env, apiKey, file);
+        const imageUrl = await uploadTelegramMediaToWebsite(env, apiKey, file);
         s.data.images = [...currentImages, imageUrl];
         await saveTelegramSession(env, s);
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Image uploaded to secure storage (" + s.data.images.length + "/2). Send one more photo or image URL, or type done to review." });
       } catch (error) {
         await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Image upload failed: " + escapeTelegramHtml(error.message || "Please try another image."), parse_mode: "HTML" });
+      }
+      return;
+    }
+
+    const incomingVideo = message.video || (message.document && String(message.document.mime_type || "").startsWith("video/") ? message.document : null);
+    if (incomingVideo?.file_id) {
+      if (s.data.video_url) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "You already added a video. Type done to review the product." });
+        return;
+      }
+      try {
+        const file = await downloadTelegramFile(env, incomingVideo.file_id, "video");
+        if (file.bytes.length > 100 * 1024 * 1024) throw new Error("That video is larger than 100 MB. Please send a smaller video.");
+        const link = await getPromoterTelegramLink(env, userId);
+        if (!link || String(link.chat_id) !== String(chatId)) throw new Error("Reconnect your Shopper's Suggestions account with /connect.");
+        const apiKey = await decryptPromoterApiKey(env, link.encrypted_api_key);
+        s.data.video_url = await uploadTelegramMediaToWebsite(env, apiKey, file);
+        await saveTelegramSession(env, s);
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "✅ Video uploaded. You can still add up to 2 images, or type done to review." });
+      } catch (error) {
+        await telegramApi(env, "sendMessage", { chat_id: chatId, text: "❌ Video upload failed: " + escapeTelegramHtml(error.message || "Please try another video."), parse_mode: "HTML" });
       }
       return;
     }
