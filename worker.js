@@ -1079,11 +1079,20 @@ async function handleIntegrationMedia(request, env) {
   if (!(request.headers.get("Content-Type") || "").startsWith("multipart/form-data")) return json({ ok: false, error: "Expected multipart/form-data." }, 400);
   const form = await request.formData();
   const file = form.get("file");
-  if (!(file instanceof File) || !String(file.type || "").startsWith("image/")) return json({ ok: false, error: "Send an image file." }, 400);
-  if (file.size <= 0 || file.size > 15 * 1024 * 1024) return json({ ok: false, error: "Image must be between 1 byte and 15 MB." }, 413);
-  const fileName = "products/" + Date.now() + "-" + crypto.randomUUID() + "." + safeExtension(file.name, file.type);
-  await b2Upload(env, fileName, new Uint8Array(await file.arrayBuffer()), file.type || "image/jpeg");
-  return json({ ok: true, url: b2MediaUrl(request, fileName), path: fileName, type: "image" }, 201);
+  if (!(file instanceof File)) return json({ ok: false, error: "Send an image or video file." }, 400);
+  const isImage = String(file.type || "").startsWith("image/");
+  const isVideo = String(file.type || "").startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(file.name || "");
+  if (!isImage && !isVideo) return json({ ok: false, error: "Only image and video files are supported." }, 400);
+  const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
+  if (file.size <= 0 || file.size > maxSize) return json({ ok: false, error: isVideo ? "Video must be 100 MB or smaller." : "Image must be 15 MB or smaller." }, 413);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (isImage) {
+    const fileName = "products/" + Date.now() + "-" + crypto.randomUUID() + "." + safeExtension(file.name, file.type);
+    await b2Upload(env, fileName, bytes, file.type || "image/jpeg");
+    return json({ ok: true, url: b2MediaUrl(request, fileName), path: fileName, type: "image" }, 201);
+  }
+  const uploaded = await githubUpload(env, bytes, file.name || "product-video.mp4", file.type || "video/mp4");
+  return json({ ok: true, url: uploaded.url, path: uploaded.path, type: "video" }, 201);
 }
 
 async function handleIntegrationProductById(request, env, productId) {
